@@ -3,6 +3,7 @@ extends Node
 var score: int = 0
 var episode_done: bool = false
 
+@onready var state_tracker = $RLState
 @onready var player = $"../LevelRoot/Player"
 @onready var enemies = $"../LevelRoot/Enemies"
 @onready var apples = $"../LevelRoot/Apple"
@@ -21,35 +22,30 @@ func reset() -> void:
 
 
 func step(action: int) -> Dictionary:
-	if episode_done:
-		return {
-			"state": get_state(),
-			"reward": 0.0,
-			"done": true,
-			"score": score
-		}
-
-	# Send action to the player
 	player.set_rl_action(action)
 
-	# For now we give a small default reward
-	var reward := 0.0
+	var state = get_state()
+
+	print(
+		"Action: ",
+		action,
+		" | State: ",
+		state
+	)
 
 	return {
-		"state": get_state(),
-		"reward": reward,
+		"state": state,
+		"reward": 0.0,
 		"done": episode_done,
 		"score": score
 	}
 
-
-func get_state() -> Dictionary:
-	return {
-		"player_x": player.position.x,
-		"player_y": player.position.y,
-		"alive": player.alive
-	}
-
+func get_state() -> String:
+	return state_tracker.get_state(
+		player,
+		apples,
+		enemies
+	)
 
 func get_score() -> int:
 	return score
