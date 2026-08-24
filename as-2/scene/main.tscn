@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://c0vve6x06vhao" path="res://scripts/main.gd" id="1_v0l8b"]
 [ext_resource type="PackedScene" uid="uid://mbbo5qdyiho4" path="res://scene/level/level_root.tscn" id="2_v0l8b"]
+[ext_resource type="Script" uid="uid://cijh84xgj0mcn" path="res://scripts/rl_environment.gd" id="3_wp4xf"]
 
 [node name="Main" type="Node2D" unique_id=246419124]
 script = ExtResource("1_v0l8b")
@@ -11,3 +12,6 @@ script = ExtResource("1_v0l8b")
 [node name="Sprite2D" type="Sprite2D" parent="StaticBody2D" unique_id=1695391173]
 
 [node name="LevelRoot" parent="." unique_id=808249400 instance=ExtResource("2_v0l8b")]
+
+[node name="RLEnvironment" type="Node" parent="." unique_id=433674438]
+script = ExtResource("3_wp4xf")
