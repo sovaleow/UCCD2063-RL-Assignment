@@ -84,10 +84,11 @@ func step(action: int) -> Dictionary:
 		if episode_done:
 			break
 
-	step_in_progress = false
-
 	var state = get_state()
 	var reward = consume_reward()
+	var done = episode_done
+
+	step_in_progress = false
 
 	var result := {
 		"state": state,
@@ -158,6 +159,7 @@ func _input(event: InputEvent) -> void:
 	if not event.pressed or event.echo:
 		return
 
+	#Manual testing only
 	if step_in_progress:
 		return
 
