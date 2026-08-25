@@ -1,4 +1,7 @@
 extends Area2D
+
+signal collected
+
 @onready var animated_sprite_2d: AnimatedSprite2D = $AnimatedSprite2D
 @onready var collected_sound: AudioStreamPlayer2D = $CollectedSound
 
@@ -14,5 +17,10 @@ func _process(delta: float) -> void:
 
 
 func _on_body_entered(body: Node2D) -> void:
-	animated_sprite_2d.animation = "collected"
-	collected_sound.play()
+	# Existing apple collection behaviour
+	if body is CharacterBody2D:
+		animated_sprite_2d.animation = "collected"
+		collected_sound.play()
+
+		# ADD RL notification
+		collected.emit()
