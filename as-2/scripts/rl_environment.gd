@@ -4,6 +4,8 @@ var current_reward: float = 0.0
 var score: int = 0
 var episode_done: bool = false
 
+const ACTION_FRAMES: int = 10
+var step_in_progress: bool = false
 @onready var state_tracker = $RLState
 @onready var player = $"../LevelRoot/Player"
 @onready var enemies = $"../LevelRoot/Enemies"
@@ -25,6 +27,10 @@ func _ready() -> void:
 
 
 func reset() -> void:
+	if step_in_progress:
+		print("RESET IGNORED: step still in progress")
+		return
+
 	current_reward = 0.0
 	score = 0
 	episode_done = false
@@ -46,7 +52,6 @@ func reset() -> void:
 
 	print("Environment reset")
 
-
 func step(action: int) -> Dictionary:
 	if episode_done:
 		return {
@@ -56,11 +61,30 @@ func step(action: int) -> Dictionary:
 			"score": score
 		}
 
+	if step_in_progress:
+		return {
+			"state": get_state(),
+			"reward": 0.0,
+			"done": episode_done,
+			"score": score
+		}
+
+	step_in_progress = true
+
 	# Small penalty for taking another step
 	current_reward -= 0.01
 
 	# Give the player the RL action
 	player.set_rl_action(action)
+
+	# Let the action affect the game
+	for i in range(ACTION_FRAMES):
+		await get_tree().physics_frame
+
+		if episode_done:
+			break
+
+	step_in_progress = false
 
 	var state = get_state()
 	var reward = consume_reward()
@@ -125,29 +149,41 @@ func _on_player_died(_body) -> void:
 
 # Temporary manual RL action testing
 func _process(_delta: float) -> void:
-	if Input.is_key_pressed(KEY_1):
-		print("KEY 1 DETECTED")
-		step(1)
+	pass
 
-	if Input.is_key_pressed(KEY_2):
-		print("KEY 2 DETECTED")
-		step(2)
+func _input(event: InputEvent) -> void:
+	if not event is InputEventKey:
+		return
 
-	if Input.is_key_pressed(KEY_3):
-		print("KEY 3 DETECTED")
-		step(3)
+	if not event.pressed or event.echo:
+		return
 
-	if Input.is_key_pressed(KEY_4):
-		print("KEY 4 DETECTED")
-		step(4)
+	if step_in_progress:
+		return
 
-	if Input.is_key_pressed(KEY_5):
-		print("KEY 5 DETECTED")
-		step(5)
+	match event.keycode:
+		KEY_1:
+			print("KEY 1 DETECTED")
+			step(1)
 
-	if Input.is_key_pressed(KEY_R):
-		reset()
+		KEY_2:
+			print("KEY 2 DETECTED")
+			step(2)
 
+		KEY_3:
+			print("KEY 3 DETECTED")
+			step(3)
+
+		KEY_4:
+			print("KEY 4 DETECTED")
+			step(4)
+
+		KEY_5:
+			print("KEY 5 DETECTED")
+			step(5)
+
+		KEY_R:
+			reset()
 func _refresh_level_references() -> void:
 	player = $"../LevelRoot/Player"
 	enemies = $"../LevelRoot/Enemies"

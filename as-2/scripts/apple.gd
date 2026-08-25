@@ -5,6 +5,7 @@ signal collected
 @onready var animated_sprite_2d: AnimatedSprite2D = $AnimatedSprite2D
 @onready var collected_sound: AudioStreamPlayer2D = $CollectedSound
 
+var already_collected: bool = false
 
 # Called when the node enters the scene tree for the first time.
 func _ready() -> void:
@@ -17,10 +18,16 @@ func _process(delta: float) -> void:
 
 
 func _on_body_entered(body: Node2D) -> void:
-	# Existing apple collection behaviour
+	if already_collected:
+		return
+
 	if body is CharacterBody2D:
+		already_collected = true
+
 		animated_sprite_2d.animation = "collected"
 		collected_sound.play()
 
-		# ADD RL notification
+		# Disable the collision so the apple cannot be collected again
+		$CollisionShape2D.set_deferred("disabled", true)
+
 		collected.emit()
