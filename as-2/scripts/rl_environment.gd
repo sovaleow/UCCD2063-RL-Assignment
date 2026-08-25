@@ -29,6 +29,21 @@ func reset() -> void:
 	score = 0
 	episode_done = false
 
+	get_parent().reset_level()
+
+	_refresh_level_references()
+
+	# Reconnect RL signals
+	for enemy in enemies.get_children():
+		if enemy.has_signal("player_died"):
+			if not enemy.player_died.is_connected(_on_player_died):
+				enemy.player_died.connect(_on_player_died)
+
+	for apple in apples.get_children():
+		if apple.has_signal("collected"):
+			if not apple.collected.is_connected(_on_apple_collected):
+				apple.collected.connect(_on_apple_collected)
+
 	print("Environment reset")
 
 
@@ -132,3 +147,8 @@ func _process(_delta: float) -> void:
 
 	if Input.is_key_pressed(KEY_R):
 		reset()
+
+func _refresh_level_references() -> void:
+	player = $"../LevelRoot/Player"
+	enemies = $"../LevelRoot/Enemies"
+	apples = $"../LevelRoot/Apple"
