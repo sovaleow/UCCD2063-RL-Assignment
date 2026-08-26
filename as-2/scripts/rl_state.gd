@@ -98,6 +98,11 @@ func get_nearest_node(player: Node2D, parent_node: Node) -> Node2D:
 
 	for child in parent_node.get_children():
 		if child is Node2D:
+
+			# Ignore apples that have already been collected
+			if child.get("already_collected") == true:
+				continue
+
 			var distance = player.position.distance_to(child.position)
 
 			if distance < nearest_distance:

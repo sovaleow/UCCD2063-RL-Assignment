@@ -140,6 +140,9 @@ func _on_apple_collected() -> void:
 
 	print("APPLE COLLECTED: +10")
 
+	if score >= 20:
+		episode_done = true
+		print("ALL APPLES COLLECTED - EPISODE COMPLETE")
 
 func _on_player_died(_body) -> void:
 	add_reward(-10.0)

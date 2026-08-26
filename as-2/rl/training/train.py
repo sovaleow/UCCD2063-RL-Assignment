@@ -21,7 +21,7 @@ async def train():
         num_actions=5,
     )
 
-    num_episodes = 10
+    num_episodes  = 10
 
     results_dir = "results"
     os.makedirs(results_dir, exist_ok=True)
@@ -65,7 +65,7 @@ async def train():
 
         agent.decay_epsilon()
 
-        success = 1 if score > 0 else 0
+        success = 1 if score >= 20 else 0
 
         training_results.append({
             "episode": episode,
