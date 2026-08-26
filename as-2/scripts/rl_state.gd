@@ -10,29 +10,53 @@ func get_state(player: Node2D, apples: Node, enemies: Node) -> String:
 	var nearest_apple = get_nearest_node(player, apples)
 	var nearest_snail = get_nearest_node(player, enemies)
 
-	var apple_direction = 1
+	# Default apple state if no apple is available
+	var apple_x_direction = 1
+	var apple_y_direction = 1
 	var apple_distance = 2
 
 	if nearest_apple != null:
-		apple_direction = get_direction(player.position.x, nearest_apple.position.x)
-		apple_distance = get_distance_category(
-			player.position.distance_to(nearest_apple.position)
+		apple_x_direction = get_direction(
+			player.global_position.x,
+			nearest_apple.global_position.x
 		)
 
+		apple_y_direction = get_vertical_direction(
+			player.global_position,
+			nearest_apple.global_position
+		)
+
+		apple_distance = get_distance_category(
+			player.global_position.distance_to(
+				nearest_apple.global_position
+			)
+		)
+
+	var apples_collected = 0
+
+	for apple in apples.get_children():
+		if apple.get("already_collected") == true:
+			apples_collected += 1
+
+	# Default snail distance
 	var snail_distance = 2
 
 	if nearest_snail != null:
 		snail_distance = get_distance_category(
-			player.position.distance_to(nearest_snail.position)
+			player.global_position.distance_to(
+				nearest_snail.global_position
+			)
 		)
 
 	return str(
 		player_x_zone, ",",
 		player_y_zone, ",",
 		on_ground, ",",
-		apple_direction, ",",
+		apple_x_direction, ",",
+		apple_y_direction, ",",
 		apple_distance, ",",
-		snail_distance
+		snail_distance, ",",
+		apples_collected
 	)
 
 
@@ -63,7 +87,7 @@ func get_y_zone(y: float) -> int:
 
 
 # --------------------------------------------------
-# Direction toward another object
+# Horizontal direction toward another object
 # --------------------------------------------------
 
 func get_direction(player_x: float, target_x: float) -> int:
@@ -75,6 +99,19 @@ func get_direction(player_x: float, target_x: float) -> int:
 		return 1
 
 
+# --------------------------------------------------
+# Vertical direction toward another object
+# --------------------------------------------------
+
+func get_vertical_direction(player_pos: Vector2, target_pos: Vector2) -> int:
+	var vertical_difference = target_pos.y - player_pos.y
+
+	if vertical_difference < -50:
+		return 0 # ABOVE
+	elif vertical_difference > 50:
+		return 2 # BELOW
+	else:
+		return 1 # SAME LEVEL
 # --------------------------------------------------
 # Distance category
 # --------------------------------------------------

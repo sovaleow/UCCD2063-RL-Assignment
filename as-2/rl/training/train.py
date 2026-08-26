@@ -14,15 +14,15 @@ async def train():
 
     agent = SARSAAgent(
         learning_rate=0.1,
-        discount_factor=0.9,
+        discount_factor=0.98,
         epsilon=1.0,
-        epsilon_decay=0.995,
+        epsilon_decay=0.997,
         epsilon_min=0.05,
         num_actions=5,
     )
 
-    num_episodes  = 10
-
+    num_episodes  = 100
+    max_steps = 500
     results_dir = "results"
     os.makedirs(results_dir, exist_ok=True)
 
@@ -37,10 +37,15 @@ async def train():
         total_reward = 0.0
         steps = 0
 
-        while not done:
+        while not done and steps < max_steps:
             steps += 1
 
             next_state, reward, done, score = await env.step(action)
+
+            steps_reached_limit = steps >= max_steps and not done
+
+            if steps_reached_limit:
+                done = True
 
             total_reward += reward
 
@@ -63,6 +68,9 @@ async def train():
             if not done:
                 action = next_action
 
+        if not done and steps >= max_steps:
+            done = True
+            print(f"Episode {episode} reached maximum steps ({max_steps})")
         agent.decay_epsilon()
 
         success = 1 if score >= 20 else 0

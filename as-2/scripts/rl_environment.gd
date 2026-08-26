@@ -4,6 +4,8 @@ var current_reward: float = 0.0
 var score: int = 0
 var episode_done: bool = false
 
+var previous_apple_distance: float = -1.0
+
 const ACTION_FRAMES: int = 10
 var step_in_progress: bool = false
 @onready var state_tracker = $RLState
@@ -34,10 +36,13 @@ func reset() -> void:
 	current_reward = 0.0
 	score = 0
 	episode_done = false
+	previous_apple_distance = -1.0
 
 	get_parent().reset_level()
 
 	_refresh_level_references()
+
+	previous_apple_distance = get_nearest_apple_distance()
 
 	# Reconnect RL signals
 	for enemy in enemies.get_children():
@@ -52,8 +57,11 @@ func reset() -> void:
 
 	print("Environment reset")
 
+
 func step(action: int) -> Dictionary:
 	if episode_done:
+		print("WARNING: step() called after episode already ended")
+
 		return {
 			"state": get_state(),
 			"reward": 0.0,
@@ -72,7 +80,7 @@ func step(action: int) -> Dictionary:
 	step_in_progress = true
 
 	# Small penalty for taking another step
-	current_reward -= 0.01
+	current_reward -= 0.05
 
 	# Give the player the RL action
 	player.set_rl_action(action)
@@ -84,8 +92,18 @@ func step(action: int) -> Dictionary:
 		if episode_done:
 			break
 
+	var current_apple_distance = get_nearest_apple_distance()
+
+	if previous_apple_distance >= 0.0 and current_apple_distance >= 0.0:
+		var distance_change = previous_apple_distance - current_apple_distance
+		var progress_reward = clamp(distance_change * 0.02, -0.05, 0.05)
+		current_reward += progress_reward
+
+	previous_apple_distance = current_apple_distance
+
 	var state = get_state()
 	var reward = consume_reward()
+
 	var done = episode_done
 
 	step_in_progress = false
@@ -93,7 +111,7 @@ func step(action: int) -> Dictionary:
 	var result := {
 		"state": state,
 		"reward": reward,
-		"done": episode_done,
+		"done": done,
 		"score": score
 	}
 
@@ -135,20 +153,21 @@ func consume_reward() -> float:
 
 
 func _on_apple_collected() -> void:
-	add_reward(10.0)
+	add_reward(30.0)
 	score += 10
 
-	print("APPLE COLLECTED: +10")
+	print("APPLE COLLECTED: +30")
 
 	if score >= 20:
+		add_reward(80.0)
 		episode_done = true
-		print("ALL APPLES COLLECTED - EPISODE COMPLETE")
+		print("ALL APPLES COLLECTED - COMPLETION BONUS +80")
 
 func _on_player_died(_body) -> void:
-	add_reward(-10.0)
+	add_reward(-20.0)
 	episode_done = true
 
-	print("PLAYER DIED: -10")
+	print("PLAYER DIED: -20")
 
 
 # Temporary manual RL action testing
@@ -189,6 +208,33 @@ func _input(event: InputEvent) -> void:
 
 		KEY_R:
 			reset()
+
+func get_nearest_apple_distance() -> float:
+	var nearest_distance := INF
+
+	if player == null or apples == null:
+		return -1.0
+
+	for apple in apples.get_children():
+		if not apple is Node2D:
+			continue
+
+		if apple.get("already_collected") == true:
+			continue
+
+		var distance = player.global_position.distance_to(
+			apple.global_position
+		)
+
+		if distance < nearest_distance:
+			nearest_distance = distance
+
+	if nearest_distance == INF:
+		return -1.0
+
+	return nearest_distance
+
+
 func _refresh_level_references() -> void:
 	player = $"../LevelRoot/Player"
 	enemies = $"../LevelRoot/Enemies"
