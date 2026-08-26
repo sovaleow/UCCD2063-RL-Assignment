@@ -65,11 +65,14 @@ async def train():
 
         agent.decay_epsilon()
 
+        success = 1 if score > 0 else 0
+
         training_results.append({
             "episode": episode,
             "steps": steps,
             "total_reward": total_reward,
             "score": score,
+            "success": success,
             "epsilon": agent.epsilon
         })
 
@@ -78,8 +81,39 @@ async def train():
             f"Steps={steps}, "
             f"Total Reward={total_reward:.2f}, "
             f"Score={score}, "
+            f"Success={success},"
             f"Epsilon={agent.epsilon:.4f}"
         )
+
+    #Training summary
+    success_count = sum(
+        result["success"] for result in training_results
+    )
+
+    success_rate = (
+        success_count / num_episodes
+    ) * 100
+
+    average_reward = sum(
+        result["total_reward"] for result in training_results
+    ) / num_episodes
+
+    average_score = sum(
+        result["score"] for result in training_results
+    ) / num_episodes
+
+    average_steps = sum(
+        result["steps"] for result in training_results
+    ) / num_episodes
+
+    print()
+    print("=" * 50)
+    print("TRAINING SUMMARY")
+    print("=" * 50)
+    print(f"Average reward: {average_reward:.2f}")
+    print(f"Average score: {average_score:.2f}")
+    print(f"Average steps: {average_steps:.2f}")
+    print(f"Success rate: {success_rate:.2f}%")
 
     # Save Q-table
     with open(
@@ -102,6 +136,7 @@ async def train():
                 "steps",
                 "total_reward",
                 "score",
+                "success",
                 "epsilon"
             ]
         )
