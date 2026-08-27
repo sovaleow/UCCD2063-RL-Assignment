@@ -22,7 +22,7 @@ async def train():
     )
 
     num_episodes  = 1000
-    max_steps = 500
+    max_steps = 800
     results_dir = "results"
     os.makedirs(results_dir, exist_ok=True)
 

@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 # Load training results
 # ==========================================
 
-df = pd.read_csv("as-2/v1-1000results/training_results.csv")
+df = pd.read_csv("as-2/v2-1000results/training_results.csv")
 
 
 # ==========================================
@@ -55,7 +55,7 @@ plt.legend()
 plt.grid(True)
 
 plt.tight_layout()
-plt.savefig("as-2/v1-1000results/training_reward.png", dpi=300)
+plt.savefig("as-2/v2-1000results/training_reward.png", dpi=300)
 plt.show()
 
 
@@ -89,7 +89,7 @@ plt.legend()
 plt.grid(True)
 
 plt.tight_layout()
-plt.savefig("as-2/v1-1000results/apples_collected.png", dpi=300)
+plt.savefig("as-2/v2-1000results/apples_collected.png", dpi=300)
 plt.show()
 
 
@@ -121,7 +121,7 @@ plt.legend()
 plt.grid(True)
 
 plt.tight_layout()
-plt.savefig("as-2/v1-1000results/steps_per_episode.png", dpi=300)
+plt.savefig("as-2/v2-1000results/steps_per_episode.png", dpi=300)
 plt.show()
 
 
@@ -144,13 +144,13 @@ plt.title("Epsilon Decay Over Training")
 plt.grid(True)
 
 plt.tight_layout()
-plt.savefig("as-2/v1-1000results/epsilon_decay.png", dpi=300)
+plt.savefig("as-2/v2-1000results/epsilon_decay.png", dpi=300)
 plt.show()
 
 
 print("Graphs generated successfully!")
 print("Saved to:")
-print("as-2/v1-1000results/training_reward.png")
-print("as-2/v1-1000results/apples_collected.png")
-print("as-2/v1-1000results/steps_per_episode.png")
-print("as-2/v1-1000results/epsilon_decay.png")
+print("as-2/v2-1000results/training_reward.png")
+print("as-2/v2-1000results/apples_collected.png")
+print("as-2/v2-1000results/steps_per_episode.png")
+print("as-2/v2-1000results/epsilon_decay.png")
