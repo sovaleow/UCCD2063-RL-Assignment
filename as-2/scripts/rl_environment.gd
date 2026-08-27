@@ -92,15 +92,6 @@ func step(action: int) -> Dictionary:
 		if episode_done:
 			break
 
-	var current_apple_distance = get_nearest_apple_distance()
-
-	if previous_apple_distance >= 0.0 and current_apple_distance >= 0.0:
-		var distance_change = previous_apple_distance - current_apple_distance
-		var progress_reward = clamp(distance_change * 0.02, -0.05, 0.05)
-		current_reward += progress_reward
-
-	previous_apple_distance = current_apple_distance
-
 	var state = get_state()
 	var reward = consume_reward()
 

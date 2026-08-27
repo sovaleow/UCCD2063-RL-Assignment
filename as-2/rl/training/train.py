@@ -21,7 +21,7 @@ async def train():
         num_actions=5,
     )
 
-    num_episodes  = 100
+    num_episodes  = 1000
     max_steps = 500
     results_dir = "results"
     os.makedirs(results_dir, exist_ok=True)
@@ -68,9 +68,6 @@ async def train():
             if not done:
                 action = next_action
 
-        if not done and steps >= max_steps:
-            done = True
-            print(f"Episode {episode} reached maximum steps ({max_steps})")
         agent.decay_epsilon()
 
         success = 1 if score >= 20 else 0
