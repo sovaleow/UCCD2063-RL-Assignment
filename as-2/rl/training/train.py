@@ -17,12 +17,12 @@ async def train():
         discount_factor=0.98,
         epsilon=1.0,
         epsilon_decay=0.997,
-        epsilon_min=0.05,
-        num_actions=5,
+        epsilon_min=0.02,
+        num_actions=6,
     )
 
-    num_episodes  = 1000
-    max_steps = 800
+    num_episodes  = 1200
+    max_steps = 500
     results_dir = "results"
     os.makedirs(results_dir, exist_ok=True)
 

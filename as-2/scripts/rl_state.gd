@@ -16,12 +16,18 @@ func get_state(player: Node2D, apples: Node, enemies: Node) -> String:
 	var apple_distance = 2
 
 	var snail_x_direction = 1
+	var snail_movement_direction = 1
 
-	if nearest_snail:
+	if nearest_snail != null:
 		if nearest_snail.global_position.x < player.global_position.x:
 			snail_x_direction = 0
 		elif nearest_snail.global_position.x > player.global_position.x:
 			snail_x_direction = 2
+
+		if nearest_snail.direction < 0:
+			snail_movement_direction = 0
+		elif nearest_snail.direction > 0:
+			snail_movement_direction = 2
 
 	if nearest_apple != null:
 		apple_x_direction = get_direction(
@@ -64,6 +70,7 @@ func get_state(player: Node2D, apples: Node, enemies: Node) -> String:
 		apple_y_direction, ",",
 		apple_distance, ",",
 		snail_x_direction, ",",
+		snail_movement_direction, ",",
 		snail_distance, ",",
 		apples_collected
 	)

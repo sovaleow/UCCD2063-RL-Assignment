@@ -110,7 +110,7 @@ func _handle_reset() -> void:
 
 
 func _handle_step(action: int) -> void:
-	if action < 1 or action > 5:
+	if action < 0 or action > 5:
 		_send_error("Invalid action: " + str(action))
 		return
 

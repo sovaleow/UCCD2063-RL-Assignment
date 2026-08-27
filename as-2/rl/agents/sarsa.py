@@ -5,11 +5,11 @@ class SARSAAgent:
     def __init__(
         self,
         learning_rate=0.1,
-        discount_factor=0.9,
+        discount_factor=0.98,
         epsilon=1.0,
-        epsilon_decay=0.995,
-        epsilon_min=0.05,
-        num_actions=5,
+        epsilon_decay=0.997,
+        epsilon_min=0.02,
+        num_actions=6,
     ):
         self.alpha = learning_rate
         self.gamma = discount_factor
@@ -22,7 +22,8 @@ class SARSAAgent:
 
         # Q-table:
         # key   = state
-        # value = list of Q-values for actions 1–5
+        # value = [Q(STOP), Q(LEFT), Q(RIGHT),
+        #          Q(JUMP), Q(LEFT+JUMP), Q(RIGHT+JUMP)]
         self.q_table = {}
 
     def _ensure_state(self, state):
@@ -34,15 +35,14 @@ class SARSAAgent:
 
         # Exploration
         if random.random() < self.epsilon:
-            return random.randint(1, self.num_actions)
+            return random.randint(0, self.num_actions - 1)
 
         # Exploitation
         q_values = self.q_table[state]
-
         max_q = max(q_values)
 
         best_actions = [
-            action + 1
+            action
             for action, value in enumerate(q_values)
             if value == max_q
         ]
@@ -60,18 +60,18 @@ class SARSAAgent:
     ):
         self._ensure_state(state)
 
-        current_q = self.q_table[state][action - 1]
+        current_q = self.q_table[state][action]
 
         if done:
             target = reward
         else:
             self._ensure_state(next_state)
 
-            next_q = self.q_table[next_state][next_action - 1]
+            next_q = self.q_table[next_state][next_action]
 
             target = reward + self.gamma * next_q
 
-        self.q_table[state][action - 1] += (
+        self.q_table[state][action] += (
             self.alpha * (target - current_q)
         )
 

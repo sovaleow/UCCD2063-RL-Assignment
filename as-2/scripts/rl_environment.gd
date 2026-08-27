@@ -142,12 +142,15 @@ func consume_reward() -> float:
 	current_reward = 0.0
 	return reward
 
-
 func _on_apple_collected() -> void:
-	add_reward(30.0)
-	score += 10
+	if score == 0:
+		add_reward(30.0)
+		print("APPLE 1 COLLECTED: +30")
+	else:
+		add_reward(60.0)
+		print("APPLE 2 COLLECTED: +60")
 
-	print("APPLE COLLECTED: +30")
+	score += 10
 
 	if score >= 20:
 		add_reward(80.0)
