@@ -1,4 +1,17 @@
-# Godot 4+ specific ignores
-.godot/
 /android/
+# Python virtual environment
 .venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Godot generated files
+.godot/
+
+# IDE files
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
