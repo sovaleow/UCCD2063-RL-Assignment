@@ -1,60 +1,151 @@
 extends Node
 
 # ============================================================
-# SARSA V7 ENVIRONMENT
+# SARSA V14 - ROUTE-BASED REWARD ENVIRONMENT
 # ============================================================
+#
+# Desired route:
+#
+# START
+#   -> MIDDLE UPPER PLATFORM
+#   -> LEFT SIDE OF MIDDLE PLATFORM
+#   -> DESCEND
+#   -> BOTTOM APPLE
+#   -> LEFT PLATFORM
+#   -> LEFT APPLE
+#   -> SUCCESS
+#
+# The bottom-right corner is a known unrecoverable trap.
+# The agent is strongly punished and the episode ends.
+#
+# The middle upper platform is useful before Apple 1,
+# but VERY BAD after Apple 1.
+# ============================================================
+
 
 var current_reward: float = 0.0
 var score: int = 0
 var episode_done: bool = false
-
-var previous_target_distance: float = -1.0
-
 var step_in_progress: bool = false
 
-const ACTION_FRAMES: int = 15
 
-# ============================================================
-# REWARDS
-# ============================================================
+# ------------------------------------------------------------
+# ACTION TIMING
+# ------------------------------------------------------------
 
-const FIRST_APPLE_REWARD: float = 30.0
-const SECOND_APPLE_REWARD: float = 60.0
-const COMPLETION_REWARD: float = 80.0
+const ACTION_FRAMES: int = 10
 
-const LEFT_PLATFORM_BONUS: float = 15.0
 
-const BOTTOM_RIGHT_ENTRY_PENALTY: float = -3.0
-const BOTTOM_RIGHT_STAY_PENALTY: float = -1.0
+# ------------------------------------------------------------
+# OBJECTIVE REWARDS
+# ------------------------------------------------------------
+
+const MIDDLE_PLATFORM_REWARD: float = 15.0
+const LEFT_DESCENT_REWARD: float = 15.0
+const BOTTOM_FLOOR_REWARD: float = 10.0
+
+const FIRST_APPLE_REWARD: float = 50.0
+const LEFT_PLATFORM_REWARD: float = 30.0
+const SECOND_APPLE_REWARD: float = 100.0
+const COMPLETION_REWARD: float = 100.0
+
+
+# ------------------------------------------------------------
+# SMALL ROUTE SHAPING
+# ------------------------------------------------------------
+# Kept deliberately small.
+# It must not overpower milestone rewards.
+# ------------------------------------------------------------
+
+const ROUTE_PROGRESS_REWARD: float = 0.10
+const WRONG_ROUTE_DIRECTION_PENALTY: float = -0.10
+
+
+# ------------------------------------------------------------
+# STAGNATION
+# ------------------------------------------------------------
+
+const START_STAY_LIMIT: int = 5
+const START_STAY_PENALTY: float = -2.0
+
+const MIDDLE_STAY_LIMIT: int = 5
+const MIDDLE_STAY_PENALTY: float = -4.0
+
+const STUCK_CHECK_LIMIT: int = 3
+const STUCK_MIN_MOVEMENT: float = 18.0
+const GENERAL_STUCK_PENALTY: float = -4.0
+
+
+# ------------------------------------------------------------
+# DANGEROUS AREAS
+# ------------------------------------------------------------
+
+const RIGHT_CORNER_WARNING_PENALTY: float = -10.0
+const LEFT_CORNER_WARNING_PENALTY: float = -5.0
+
+const RIGHT_CORNER_PENALTY: float = -75.0
+const LEFT_CORNER_PENALTY: float = -30.0
+
+# After first apple, returning to middle is strongly discouraged.
+const RETURN_TO_MIDDLE_PENALTY: float = -20.0
+
+# Additional penalty for remaining on far-right bottom floor
+# after first apple.
+const WRONG_SIDE_AFTER_APPLE_PENALTY: float = -2.0
 
 const TIME_PENALTY: float = -0.05
+const DEATH_PENALTY: float = -30.0
 
-# ============================================================
+
+# ------------------------------------------------------------
 # TRACKING
-# ============================================================
+# ------------------------------------------------------------
 
+var middle_platform_bonus_given: bool = false
+var left_descent_bonus_given: bool = false
+var bottom_floor_bonus_given: bool = false
 var left_platform_bonus_given: bool = false
-var previously_in_bottom_right: bool = false
+
+var start_stay_steps: int = 0
+var middle_stay_steps: int = 0
+var stuck_steps: int = 0
 
 
-@onready var state_tracker = $RLState
-@onready var player = $"../LevelRoot/Player"
-@onready var enemies = $"../LevelRoot/Enemies"
-@onready var apples = $"../LevelRoot/Apple"
+# ------------------------------------------------------------
+# NODE REFERENCES
+# ------------------------------------------------------------
 
+@onready var state_tracker: Node = $RLState
+
+@onready var player: CharacterBody2D = (
+	$"../LevelRoot/Player"
+)
+
+@onready var enemies: Node = (
+	$"../LevelRoot/Enemies"
+)
+
+@onready var apples: Node = (
+	$"../LevelRoot/Apple"
+)
+
+
+# ------------------------------------------------------------
+# READY
+# ------------------------------------------------------------
 
 func _ready() -> void:
 
 	print(
-		"=== SARSA V7 RL ENVIRONMENT STARTED ==="
+        "=== SARSA V14 RL ENVIRONMENT STARTED ==="
 	)
 
 	_connect_signals()
 
 
-# ============================================================
+# ------------------------------------------------------------
 # SIGNALS
-# ============================================================
+# ------------------------------------------------------------
 
 func _connect_signals() -> void:
 
@@ -62,7 +153,9 @@ func _connect_signals() -> void:
 
 		for enemy in enemies.get_children():
 
-			if enemy.has_signal("player_died"):
+			if enemy.has_signal(
+                "player_died"
+			):
 
 				if not enemy.player_died.is_connected(
 					_on_player_died
@@ -72,12 +165,13 @@ func _connect_signals() -> void:
 						_on_player_died
 					)
 
-
 	if apples != null:
 
 		for apple in apples.get_children():
 
-			if apple.has_signal("collected"):
+			if apple.has_signal(
+                "collected"
+			):
 
 				if not apple.collected.is_connected(
 					_on_apple_collected
@@ -88,48 +182,42 @@ func _connect_signals() -> void:
 					)
 
 
-# ============================================================
+# ------------------------------------------------------------
 # RESET
-# ============================================================
+# ------------------------------------------------------------
 
 func reset() -> void:
 
 	if step_in_progress:
-
-		print(
-			"RESET IGNORED: step still in progress"
-		)
-
 		return
-
 
 	current_reward = 0.0
 	score = 0
 	episode_done = false
+	step_in_progress = false
 
-	previous_target_distance = -1.0
-
+	middle_platform_bonus_given = false
+	left_descent_bonus_given = false
+	bottom_floor_bonus_given = false
 	left_platform_bonus_given = false
-	previously_in_bottom_right = false
 
+	start_stay_steps = 0
+	middle_stay_steps = 0
+	stuck_steps = 0
 
 	get_parent().reset_level()
 
 	_refresh_level_references()
-
 	_connect_signals()
 
 
-	previous_target_distance = (
-		get_target_distance()
-	)
-
-
-# ============================================================
+# ------------------------------------------------------------
 # STEP
-# ============================================================
+# ------------------------------------------------------------
 
-func step(action: int) -> Dictionary:
+func step(
+	action: int
+) -> Dictionary:
 
 	if episode_done:
 
@@ -140,7 +228,6 @@ func step(action: int) -> Dictionary:
 			"score": score
 		}
 
-
 	if step_in_progress:
 
 		return {
@@ -150,187 +237,441 @@ func step(action: int) -> Dictionary:
 			"score": score
 		}
 
-
 	step_in_progress = true
-
-
-	# ========================================================
-	# TIME PENALTY
-	# ========================================================
 
 	current_reward += TIME_PENALTY
 
+	var position_before: Vector2 = (
+		Vector2(player.global_position)
+	)
 
 	var score_before: int = score
 
-
-	# ========================================================
-	# SEND ACTION
-	# ========================================================
-
 	player.set_rl_action(action)
 
-
-	# ========================================================
-	# RUN GAME FRAMES
-	# ========================================================
-
-	for _i in range(ACTION_FRAMES):
+	for _i: int in range(
+		ACTION_FRAMES
+	):
 
 		await get_tree().physics_frame
 
 		if episode_done:
-
 			break
 
-
-	# ========================================================
-	# STATE
-	# ========================================================
-
-	var state: String = get_state()
-
-
-	# ========================================================
-	# REWARD
-	# ========================================================
-
-	var reward: float = (
-		consume_reward()
+	var position_after: Vector2 = (
+		Vector2(player.global_position)
 	)
 
+	var reward: float = consume_reward()
+
 
 	# ========================================================
-	# TARGET DISTANCE SHAPING
+	# SMALL ROUTE SHAPING
+	# ========================================================
+	# Only horizontal progress toward the current route
+	# target. No Euclidean-distance reward.
 	# ========================================================
 
-	var current_distance: float = (
-		get_target_distance()
-	)
+	if not episode_done:
+
+		var target: Vector2 = (
+			get_target_position()
+		)
+
+		var before_dx: float = absf(
+			position_before.x
+			- target.x
+		)
+
+		var after_dx: float = absf(
+			position_after.x
+			- target.x
+		)
+
+		if after_dx < before_dx - 5.0:
+
+			reward += (
+				ROUTE_PROGRESS_REWARD
+			)
+
+		elif after_dx > before_dx + 20.0:
+
+			reward += (
+				WRONG_ROUTE_DIRECTION_PENALTY
+			)
 
 
-	var apple_collected: bool = (
-		score > score_before
+	# ========================================================
+	# STAGNATION
+	# ========================================================
+
+	reward += get_stagnation_penalty()
+
+
+	# ========================================================
+	# DANGER
+	# ========================================================
+
+	reward += handle_danger_zones()
+
+
+	# ========================================================
+	# ROUTE MILESTONES
+	# ========================================================
+
+	reward += handle_route_waypoints()
+
+
+	# ========================================================
+	# GENERAL STUCK DETECTION
+	# ========================================================
+
+	var movement: float = (
+		position_before.distance_to(
+			position_after
+		)
 	)
+
+	if (
+		movement < STUCK_MIN_MOVEMENT
+		and not episode_done
+	):
+
+		stuck_steps += 1
+
+	else:
+
+		stuck_steps = 0
 
 
 	if (
-		not apple_collected
-		and
-		not episode_done
-		and
-		previous_target_distance >= 0.0
-		and
-		current_distance >= 0.0
+		stuck_steps >= STUCK_CHECK_LIMIT
+		and not episode_done
 	):
 
-		var distance_change: float = (
-			previous_target_distance
-			- current_distance
-		)
+		reward += GENERAL_STUCK_PENALTY
 
-
-		reward += clampf(
-			distance_change * 0.005,
-			-0.5,
-			0.5
-		)
-
-
-	previous_target_distance = current_distance
-
-
-	# ========================================================
-	# BOTTOM-RIGHT TRAP
-	# ========================================================
-
-	var in_bottom_right: bool = (
-		is_in_bottom_right()
-	)
-
-
-	if in_bottom_right:
-
-		if not previously_in_bottom_right:
-
-			reward += (
-				BOTTOM_RIGHT_ENTRY_PENALTY
-			)
-
-			print(
-				"[V7] ENTERED BOTTOM-RIGHT: -3"
-			)
-
-		else:
-
-			reward += (
-				BOTTOM_RIGHT_STAY_PENALTY
-			)
-
-
-	previously_in_bottom_right = (
-		in_bottom_right
-	)
-
-
-	# ========================================================
-	# LEFT PLATFORM BONUS
-	#
-	# Only after bottom-middle Apple2 is collected.
-	# ========================================================
-
-	if (
-		not left_platform_bonus_given
-		and
-		has_bottom_apple_been_collected()
-		and
-		is_left_platform()
-	):
-
-		reward += (
-			LEFT_PLATFORM_BONUS
-		)
-
-		left_platform_bonus_given = true
+		stuck_steps = 0
 
 		print(
-			"[V7] LEFT PLATFORM BONUS: +15"
+            "[V14] GENERAL STUCK: -4"
 		)
 
 
-	# ========================================================
-	# DONE
-	# ========================================================
+	if score != score_before:
 
-	var done: bool = episode_done
+		start_stay_steps = 0
+		middle_stay_steps = 0
+		stuck_steps = 0
+
 
 	step_in_progress = false
 
-
-	print(
-		"[SARSA V7] Action=",
-		action,
-		" | State=",
-		state,
-		" | Reward=",
-		reward,
-		" | Done=",
-		done,
-		" | Score=",
-		score
-	)
-
-
 	return {
-		"state": state,
+		"state": get_state(),
 		"reward": reward,
-		"done": done,
+		"done": episode_done,
 		"score": score
 	}
 
 
 # ============================================================
-# STATE
+# STAGNATION
+# ============================================================
+
+func get_stagnation_penalty() -> float:
+
+	var penalty: float = 0.0
+
+	var pos: Vector2 = (
+		Vector2(player.global_position)
+	)
+
+	var stage: int = get_route_stage()
+
+
+	# --------------------------------------------------------
+	# START AREA
+	# --------------------------------------------------------
+
+	var in_start_area: bool = (
+		stage == 0
+		and pos.x >= 220.0
+		and pos.x <= 600.0
+		and pos.y <= 360.0
+	)
+
+	if in_start_area:
+		start_stay_steps += 1
+	else:
+		start_stay_steps = 0
+
+
+	if start_stay_steps > START_STAY_LIMIT:
+
+		penalty += START_STAY_PENALTY
+
+		print(
+            "[V14] START TOO LONG: -2"
+		)
+
+
+	# --------------------------------------------------------
+	# MIDDLE UPPER PLATFORM
+	# --------------------------------------------------------
+
+	var in_middle: bool = (
+		is_on_middle_platform(pos)
+	)
+
+	if (
+		in_middle
+		and score == 0
+	):
+
+		middle_stay_steps += 1
+
+	else:
+
+		middle_stay_steps = 0
+
+
+	if middle_stay_steps > MIDDLE_STAY_LIMIT:
+
+		penalty += MIDDLE_STAY_PENALTY
+
+		print(
+            "[V14] MIDDLE TOO LONG: -4"
+		)
+
+
+	return penalty
+
+
+# ============================================================
+# DANGER HANDLING
+# ============================================================
+
+func handle_danger_zones() -> float:
+
+	var reward: float = 0.0
+
+	var pos: Vector2 = (
+		Vector2(player.global_position)
+	)
+
+
+	# --------------------------------------------------------
+	# BOTTOM-RIGHT TRAP
+	# --------------------------------------------------------
+
+	if (
+		pos.x >= 1050.0
+		and pos.y >= 630.0
+	):
+
+		if pos.x < 1120.0:
+
+			reward += (
+				RIGHT_CORNER_WARNING_PENALTY
+			)
+
+			print(
+                "[V14] RIGHT CORNER WARNING: -10"
+			)
+
+		else:
+
+			reward += (
+				RIGHT_CORNER_PENALTY
+			)
+
+			episode_done = true
+
+			print("[V14] BOTTOM-RIGHT TRAP: -75 -> EPISODE FAILED")
+
+			return reward
+
+
+	# --------------------------------------------------------
+	# BOTTOM-LEFT TRAP
+	# --------------------------------------------------------
+
+	if (
+		pos.x <= 220.0
+		and pos.y >= 630.0
+	):
+
+		if pos.x > 120.0:
+
+			reward += (
+				LEFT_CORNER_WARNING_PENALTY
+			)
+
+			print(
+                "[V14] LEFT CORNER WARNING: -5"
+			)
+
+		else:
+
+			reward += (
+				LEFT_CORNER_PENALTY
+			)
+
+			episode_done = true
+
+			print("[V14] BOTTOM-LEFT TRAP: -30 -> EPISODE FAILED")
+
+			return reward
+
+
+	# --------------------------------------------------------
+	# RETURN TO MIDDLE AFTER FIRST APPLE
+	# --------------------------------------------------------
+
+	if (
+		score >= 10
+		and is_on_middle_platform(pos)
+	):
+
+		reward += (
+			RETURN_TO_MIDDLE_PENALTY
+		)
+
+		print(
+            "[V14] RETURNED TO MIDDLE: -20"
+		)
+
+
+	# --------------------------------------------------------
+	# WRONG SIDE AFTER FIRST APPLE
+	# --------------------------------------------------------
+	# The desired direction after Apple 1 is LEFT.
+	# Remaining on the far-right bottom area is undesirable.
+	# --------------------------------------------------------
+
+	if (
+		score >= 10
+		and is_bottom_floor(pos)
+		and pos.x > 900.0
+	):
+
+		reward += (
+			WRONG_SIDE_AFTER_APPLE_PENALTY
+		)
+
+
+	return reward
+
+
+# ============================================================
+# ROUTE MILESTONES
+# ============================================================
+
+func handle_route_waypoints() -> float:
+
+	var reward: float = 0.0
+
+	var pos: Vector2 = (
+		Vector2(player.global_position)
+	)
+
+	var stage: int = get_route_stage()
+
+
+	# --------------------------------------------------------
+	# MIDDLE UPPER PLATFORM
+	# --------------------------------------------------------
+
+	if (
+		not middle_platform_bonus_given
+		and score == 0
+		and stage >= 1
+	):
+
+		reward += (
+			MIDDLE_PLATFORM_REWARD
+		)
+
+		middle_platform_bonus_given = true
+
+		print(
+            "[V14] MIDDLE UPPER PLATFORM: +15"
+		)
+
+
+	# --------------------------------------------------------
+	# LEFT SIDE OF MIDDLE
+	# --------------------------------------------------------
+
+	if (
+		not left_descent_bonus_given
+		and score == 0
+		and stage >= 2
+		and not is_bottom_floor(pos)
+	):
+
+		reward += (
+			LEFT_DESCENT_REWARD
+		)
+
+		left_descent_bonus_given = true
+
+		print(
+            "[V14] LEFT SIDE OF MIDDLE: +15"
+		)
+
+
+	# --------------------------------------------------------
+	# SAFE BOTTOM FLOOR
+	# --------------------------------------------------------
+
+	if (
+		not bottom_floor_bonus_given
+		and score == 0
+		and stage >= 3
+		and is_bottom_floor(pos)
+		and pos.x > 220.0
+		and pos.x < 1050.0
+	):
+
+		reward += (
+			BOTTOM_FLOOR_REWARD
+		)
+
+		bottom_floor_bonus_given = true
+
+		print(
+            "[V14] SAFE BOTTOM FLOOR: +10"
+		)
+
+
+	# --------------------------------------------------------
+	# LEFT PLATFORM
+	# --------------------------------------------------------
+
+	if (
+		score >= 10
+		and not left_platform_bonus_given
+		and is_left_platform()
+	):
+
+		reward += (
+			LEFT_PLATFORM_REWARD
+		)
+
+		left_platform_bonus_given = true
+
+		print(
+            "[V14] LEFT APPLE PLATFORM: +30"
+		)
+
+
+	return reward
+
+
+# ============================================================
+# STATE / ROUTE
 # ============================================================
 
 func get_state() -> String:
@@ -342,9 +683,21 @@ func get_state() -> String:
 	)
 
 
-# ============================================================
-# SCORE
-# ============================================================
+func get_route_stage() -> int:
+
+	return state_tracker.get_route_stage(
+		player,
+		apples
+	)
+
+
+func get_target_position() -> Vector2:
+
+	return state_tracker.get_target_position(
+		player,
+		apples
+	)
+
 
 func get_score() -> int:
 
@@ -357,7 +710,7 @@ func is_done() -> bool:
 
 
 # ============================================================
-# REWARD
+# REWARD BUFFER
 # ============================================================
 
 func add_reward(
@@ -377,7 +730,7 @@ func consume_reward() -> float:
 
 
 # ============================================================
-# APPLE COLLECTED
+# APPLES
 # ============================================================
 
 func _on_apple_collected() -> void:
@@ -389,7 +742,7 @@ func _on_apple_collected() -> void:
 		)
 
 		print(
-			"BOTTOM/APPLE 1 COLLECTED: +30"
+            "[V14] BOTTOM APPLE: +50"
 		)
 
 	else:
@@ -399,9 +752,8 @@ func _on_apple_collected() -> void:
 		)
 
 		print(
-			"APPLE 2 COLLECTED: +60"
+            "[V14] LEFT APPLE: +100"
 		)
-
 
 	score += 10
 
@@ -415,8 +767,7 @@ func _on_apple_collected() -> void:
 		episode_done = true
 
 		print(
-			"ALL 2 APPLES COLLECTED "
-			+ "- COMPLETION BONUS +80"
+            "[V14] BOTH APPLES: +100 -> SUCCESS"
 		)
 
 
@@ -424,92 +775,69 @@ func _on_apple_collected() -> void:
 # DEATH
 # ============================================================
 
-func _on_player_died(_body) -> void:
+func _on_player_died(
+	_body: Node
+) -> void:
 
-	add_reward(-20.0)
+	add_reward(
+		DEATH_PENALTY
+	)
 
 	episode_done = true
 
 	print(
-		"PLAYER DIED: -20"
+        "[V14] PLAYER DIED: -30"
 	)
 
 
 # ============================================================
-# TARGET DISTANCE
+# LEVEL GEOMETRY
 # ============================================================
 
-func get_target_distance() -> float:
+func is_bottom_floor(
+	pos: Vector2
+) -> bool:
 
-	if player == null or apples == null:
-
-		return -1.0
-
-
-	var bottom_apple: Node2D = null
-	var left_apple: Node2D = null
+	return pos.y >= 630.0
 
 
-	for child in apples.get_children():
+func is_on_middle_platform(
+	pos: Vector2
+) -> bool:
 
-		if not child is Node2D:
-
-			continue
-
-
-		var apple: Node2D = child as Node2D
-
-
-		if apple.name == "Apple2":
-
-			bottom_apple = apple
-
-		elif apple.name == "Apple":
-
-			left_apple = apple
+	return (
+		pos.x >= 700.0
+		and pos.x <= 960.0
+		and pos.y >= 430.0
+		and pos.y < 560.0
+	)
 
 
-	# First target
+func is_left_platform() -> bool:
+
 	if (
-		bottom_apple != null
-		and
-		bottom_apple.get(
-			"already_collected"
-		) != true
+		player == null
+		or not player.is_on_floor()
 	):
-
-		return player.global_position.distance_to(
-			bottom_apple.global_position
-		)
-
-
-	# Second target
-	if (
-		left_apple != null
-		and
-		left_apple.get(
-			"already_collected"
-		) != true
-	):
-
-		return player.global_position.distance_to(
-			left_apple.global_position
-		)
-
-
-	return -1.0
-
-
-# ============================================================
-# BOTTOM APPLE
-# ============================================================
-
-func has_bottom_apple_been_collected() -> bool:
-
-	if apples == null:
 
 		return false
 
+	var pos: Vector2 = (
+		Vector2(player.global_position)
+	)
+
+	return (
+		pos.x >= 20.0
+		and pos.x <= 620.0
+		and pos.y >= 520.0
+		and pos.y <= 620.0
+	)
+
+
+func get_bottom_apple_collected() -> bool:
+
+	if apples == null:
+		return false
 
 	for child in apples.get_children():
 
@@ -517,120 +845,19 @@ func has_bottom_apple_been_collected() -> bool:
 
 			return (
 				child.get(
-					"already_collected"
-				)
-				== true
+                    "already_collected"
+				) == true
 			)
-
 
 	return false
 
 
 # ============================================================
-# BOTTOM-RIGHT TRAP
-# ============================================================
-
-func is_in_bottom_right() -> bool:
-
-	if player == null:
-
-		return false
-
-
-	return (
-		player.global_position.x >= 950.0
-		and
-		player.global_position.y >= 550.0
-	)
-
-
-# ============================================================
-# LEFT PLATFORM
-# ============================================================
-
-func is_left_platform() -> bool:
-
-	if player == null:
-
-		return false
-
-
-	if not player.is_on_floor():
-
-		return false
-
-
-	var pos: Vector2 = player.global_position
-
-
-	return (
-		pos.x >= 250.0
-		and
-		pos.x <= 450.0
-		and
-		pos.y >= 480.0
-		and
-		pos.y <= 570.0
-	)
-
-
-# ============================================================
-# INPUT
-# ============================================================
-
-func _input(event: InputEvent) -> void:
-
-	if not event is InputEventKey:
-
-		return
-
-
-	if (
-		not event.pressed
-		or
-		event.echo
-	):
-
-		return
-
-
-	if step_in_progress:
-
-		return
-
-
-	match event.keycode:
-
-		KEY_0:
-			step(0)
-
-		KEY_1:
-			step(1)
-
-		KEY_2:
-			step(2)
-
-		KEY_3:
-			step(3)
-
-		KEY_4:
-			step(4)
-
-		KEY_5:
-			step(5)
-
-		KEY_R:
-			reset()
-
-
-# ============================================================
-# REFRESH
+# REFRESH REFERENCES
 # ============================================================
 
 func _refresh_level_references() -> void:
 
 	player = $"../LevelRoot/Player"
-
 	enemies = $"../LevelRoot/Enemies"
-
 	apples = $"../LevelRoot/Apple"

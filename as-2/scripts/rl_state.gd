@@ -1,129 +1,61 @@
 extends Node
 
 # ============================================================
-# SARSA V7 - COMPACT SCENE-AWARE STATE
+# SARSA V14 - SCENE-AWARE STATE
 # ============================================================
 #
-# Apple order:
+# ROUTE:
+# START
+#   -> MIDDLE UPPER PLATFORM
+#   -> LEFT SIDE OF MIDDLE PLATFORM
+#   -> DESCEND FROM LEFT SIDE
+#   -> BOTTOM APPLE
+#   -> LEFT PLATFORM
+#   -> LEFT APPLE
+#   -> SUCCESS
 #
-#   1. Bottom-middle Apple2 = (845, 642)
-#   2. Left Apple            = (133, 549)
+# IMPORTANT:
+# - Bottom-right corner is a trap and should be avoided.
+# - Bottom-left corner is also treated as a trap.
+# - After the bottom apple, returning to the middle platform
+#   is a bad route.
 #
-# State:
+# State is compact because this is TABULAR SARSA.
 #
-#   0  scene_region
-#   1  target_apple
-#   2  x_direction
-#   3  y_direction
-#   4  distance_category
-#   5  on_floor
-#   6  vertical_motion
-#   7  ground_ahead
-#   8  obstacle_ahead
-#   9  snail_state
-#   10 route_progress
-#   11 bottom_right_danger
-#
+# state:
+# 0 route_stage
+# 1 target_dx
+# 2 target_dy
+# 3 on_floor
+# 4 vertical_motion
+# 5 wall_low
+# 6 wall_high
+# 7 snail_relation
+# 8 snail_distance
+# 9 danger_zone
 # ============================================================
 
 
-# ============================================================
-# KNOWN APPLE POSITIONS
-# ============================================================
+# ------------------------------------------------------------
+# LEVEL COORDINATES
+# ------------------------------------------------------------
+# These are based on the coordinates already used in the
+# current project. Adjust these only when verified against
+# the actual scene/collision geometry.
+# ------------------------------------------------------------
 
-const LEFT_APPLE_POSITION: Vector2 = Vector2(
-	133.0,
-	549.0
-)
+const MIDDLE_TARGET: Vector2 = Vector2(830.0, 500.0)
+const MIDDLE_LEFT_TARGET: Vector2 = Vector2(700.0, 500.0)
+const LEFT_DESCENT_TARGET: Vector2 = Vector2(700.0, 620.0)
 
-const BOTTOM_APPLE_POSITION: Vector2 = Vector2(
-	845.0,
-	642.0
-)
-
-
-# ============================================================
-# SCENE REGIONS
-# ============================================================
-#
-# 0 = upper / starting area
-# 1 = upper-middle
-# 2 = bottom-right danger
-# 3 = bottom-middle apple
-# 4 = lower-middle
-# 5 = lower-left
-# 6 = left apple
-#
-# ============================================================
-
-func get_scene_region(pos: Vector2) -> int:
-
-	# Left apple area
-	if (
-		pos.x <= 220.0
-		and
-		pos.y >= 480.0
-	):
-		return 6
+const BOTTOM_APPLE_POSITION: Vector2 = Vector2(845.0, 642.0)
+const LEFT_PLATFORM_TARGET: Vector2 = Vector2(430.0, 550.0)
+const LEFT_APPLE_POSITION: Vector2 = Vector2(133.0, 549.0)
 
 
-	# Lower-left platform
-	if (
-		pos.x > 220.0
-		and
-		pos.x <= 450.0
-		and
-		pos.y >= 450.0
-	):
-		return 5
-
-
-	# Lower-middle area
-	if (
-		pos.x > 450.0
-		and
-		pos.x < 700.0
-		and
-		pos.y >= 450.0
-	):
-		return 4
-
-
-	# Bottom-middle apple area
-	if (
-		pos.x >= 700.0
-		and
-		pos.x < 950.0
-		and
-		pos.y >= 550.0
-	):
-		return 3
-
-
-	# Bottom-right trap
-	if (
-		pos.x >= 950.0
-		and
-		pos.y >= 550.0
-	):
-		return 2
-
-
-	# Upper-middle
-	if (
-		pos.x >= 450.0
-		and
-		pos.x < 950.0
-	):
-		return 1
-
-
-	return 0
-
-
-# ============================================================
-# FIND APPLE
-# ============================================================
+# ------------------------------------------------------------
+# APPLE HELPERS
+# ------------------------------------------------------------
 
 func find_apple(
 	apples: Node,
@@ -135,626 +67,324 @@ func find_apple(
 
 	for child in apples.get_children():
 
-		if child is Node2D:
-
-			if child.name == apple_name:
-
-				return child as Node2D
+		if child is Node2D and child.name == apple_name:
+			return child as Node2D
 
 	return null
 
 
-# ============================================================
-# TARGET APPLE
-# ============================================================
-#
-# 0 = bottom-middle
-# 1 = left
-# 2 = complete
-#
-# ============================================================
+func is_collected(
+	apple: Node2D
+) -> bool:
 
-func get_target_apple(
+	if apple == null:
+		return false
+
+	return apple.get("already_collected") == true
+
+
+func get_bottom_apple_collected(
+	apples: Node
+) -> bool:
+
+	return is_collected(
+		find_apple(
+			apples,
+            "Apple2"
+		)
+	)
+
+
+func get_left_apple_collected(
+	apples: Node
+) -> bool:
+
+	return is_collected(
+		find_apple(
+			apples,
+            "Apple"
+		)
+	)
+
+
+# ------------------------------------------------------------
+# ROUTE STAGE
+# ------------------------------------------------------------
+
+func get_route_stage(
+	player: CharacterBody2D,
 	apples: Node
 ) -> int:
 
-	var bottom_apple: Node2D = find_apple(
-		apples,
-		"Apple2"
+	var pos: Vector2 = Vector2(
+		player.global_position
 	)
 
-	var left_apple: Node2D = find_apple(
-		apples,
-		"Apple"
+	var bottom_collected: bool = (
+		get_bottom_apple_collected(apples)
 	)
 
+	var left_collected: bool = (
+		get_left_apple_collected(apples)
+	)
 
-	var bottom_collected: bool = false
-	var left_collected: bool = false
+	# Both apples collected.
+	if bottom_collected and left_collected:
+		return 6
 
+	# --------------------------------------------------------
+	# BEFORE BOTTOM APPLE
+	# --------------------------------------------------------
 
-	if bottom_apple != null:
-
-		bottom_collected = (
-			bottom_apple.get("already_collected")
-			== true
-		)
-
-
-	if left_apple != null:
-
-		left_collected = (
-			left_apple.get("already_collected")
-			== true
-		)
-
-
-	# First target
 	if not bottom_collected:
 
+		if is_on_middle_platform(pos):
+
+			# Right / centre side of middle platform.
+			if pos.x > 780.0:
+				return 1
+
+			# Left side: descend from here.
+			return 2
+
+		# Bottom floor before first apple.
+		if is_bottom_floor(pos):
+			return 3
+
+		# Start / upper area.
 		return 0
 
+	# --------------------------------------------------------
+	# AFTER BOTTOM APPLE
+	# --------------------------------------------------------
 
-	# Second target
-	if not left_collected:
+	# First objective after Apple 1 is the LEFT PLATFORM.
+	if not is_left_platform(player):
+		return 4
 
-		return 1
-
-
-	# Finished
-	return 2
+	# Standing on left platform.
+	return 5
 
 
-# ============================================================
-# ROUTE PROGRESS
-# ============================================================
-#
-# 0 = starting route to bottom apple
-# 1 = approaching bottom apple
-# 2 = bottom apple area
-# 3 = bottom apple collected, returning left
-# 4 = left platform
-# 5 = left apple area
-# 6 = both apples
-#
-# ============================================================
+# ------------------------------------------------------------
+# CURRENT TARGET
+# ------------------------------------------------------------
 
-func get_route_progress(
-	player: Node2D,
+func get_target_position(
+	player: CharacterBody2D,
 	apples: Node
-) -> int:
+) -> Vector2:
 
-	var pos: Vector2 = player.global_position
-
-	var target: int = get_target_apple(
+	var stage: int = get_route_stage(
+		player,
 		apples
 	)
 
+	match stage:
 
-	# --------------------------------------------------------
-	# BOTH APPLES
-	# --------------------------------------------------------
+		# START -> MIDDLE UPPER PLATFORM
+		0:
+			return MIDDLE_TARGET
 
-	if target == 2:
+		# MIDDLE UPPER -> LEFT
+		1:
+			return MIDDLE_LEFT_TARGET
 
-		return 6
+		# LEFT SIDE -> DESCEND
+		2:
+			return LEFT_DESCENT_TARGET
 
+		# BOTTOM FLOOR -> BOTTOM APPLE
+		3:
+			return BOTTOM_APPLE_POSITION
 
-	# --------------------------------------------------------
-	# TARGET = BOTTOM APPLE
-	# --------------------------------------------------------
+		# BOTTOM APPLE -> LEFT PLATFORM
+		4:
+			return LEFT_PLATFORM_TARGET
 
-	if target == 0:
+		# LEFT PLATFORM -> LEFT APPLE
+		5:
+			return LEFT_APPLE_POSITION
 
-		if get_scene_region(pos) == 3:
-
-			return 2
-
-		if (
-			pos.distance_to(
-				BOTTOM_APPLE_POSITION
-			) < 250.0
-		):
-
-			return 1
-
-		return 0
-
-
-	# --------------------------------------------------------
-	# TARGET = LEFT APPLE
-	# --------------------------------------------------------
-
-	if target == 1:
-
-		var region: int = get_scene_region(pos)
-
-		if region == 6:
-
-			return 5
-
-		if region == 5:
-
-			return 4
-
-		return 3
+		# COMPLETE
+		_:
+			return Vector2(
+				player.global_position
+			)
 
 
-	return 0
-
-
-# ============================================================
+# ------------------------------------------------------------
 # MAIN STATE
-# ============================================================
+# ------------------------------------------------------------
 
 func get_state(
-	player: Node2D,
+	player: CharacterBody2D,
 	apples: Node,
 	enemies: Node
 ) -> String:
 
-	var pos: Vector2 = player.global_position
-
-
-	# ========================================================
-	# TARGET
-	# ========================================================
-
-	var target: int = get_target_apple(
+	var stage: int = get_route_stage(
+		player,
 		apples
 	)
 
-
-	var target_position: Vector2 = pos
-
-
-	if target == 0:
-
-		target_position = BOTTOM_APPLE_POSITION
-
-	elif target == 1:
-
-		target_position = LEFT_APPLE_POSITION
-
-
-	# ========================================================
-	# SCENE REGION
-	# ========================================================
-
-	var scene_region: int = get_scene_region(
-		pos
+	var target: Vector2 = get_target_position(
+		player,
+		apples
 	)
 
+	var pos: Vector2 = Vector2(
+		player.global_position
+	)
 
-	# ========================================================
-	# TARGET DIRECTION
-	# ========================================================
-
-	var x_direction: int = get_x_direction(
+	var target_dx: int = get_x_direction(
 		pos.x,
-		target_position.x
+		target.x
 	)
 
-	var y_direction: int = get_y_direction(
+	var target_dy: int = get_y_direction(
 		pos,
-		target_position
+		target
 	)
 
-
-	# ========================================================
-	# DISTANCE
-	# ========================================================
-
-	var distance_category: int = (
-		get_distance_category(
-			pos.distance_to(
-				target_position
-			)
-		)
+	var on_floor: int = (
+		1 if player.is_on_floor()
+		else 0
 	)
 
-
-	# ========================================================
-	# FLOOR
-	# ========================================================
-
-	var on_floor: int = 0
-
-	if player.is_on_floor():
-
-		on_floor = 1
-
-
-	# ========================================================
-	# PLAYER VELOCITY
-	# ========================================================
-
-	var vertical_motion: int = 1
-
-
-	var body: CharacterBody2D = (
-		player as CharacterBody2D
+	var vertical_motion: int = (
+		get_vertical_motion(player)
 	)
 
-
-	if body != null:
-
-		if body.velocity.y < -60.0:
-
-			vertical_motion = 0
-
-		elif body.velocity.y > 60.0:
-
-			vertical_motion = 2
-
-
-	# ========================================================
-	# LOCAL SENSORS
-	# ========================================================
-
-	var ground_ahead: int = (
-		get_ground_ahead_sensor(
-			player,
-			x_direction
-		)
+	var wall_low: int = get_wall_sensor(
+		player,
+		target_dx,
+		12.0
 	)
 
-
-	var obstacle_ahead: int = (
-		get_obstacle_sensor(
-			player,
-			x_direction
-		)
+	var wall_high: int = get_wall_sensor(
+		player,
+		target_dx,
+		-28.0
 	)
 
-
-	# ========================================================
-	# SNAIL
-	# ========================================================
-
-	var snail_state: int = (
-		get_snail_state(
+	var snail_relation: int = (
+		get_snail_relation(
 			player,
 			enemies
 		)
 	)
 
-
-	# ========================================================
-	# ROUTE
-	# ========================================================
-
-	var route_progress: int = (
-		get_route_progress(
+	var snail_distance: int = (
+		get_snail_distance_category(
 			player,
-			apples
+			enemies
 		)
 	)
 
-
-	# ========================================================
-	# BOTTOM-RIGHT DANGER
-	# ========================================================
-
-	var bottom_right_danger: int = 0
-
-	if scene_region == 2:
-
-		bottom_right_danger = 1
-
-
-	# ========================================================
-	# COMPACT STATE
-	# ========================================================
+	var danger_zone: int = (
+		get_danger_zone(pos)
+	)
 
 	return str(
-		scene_region, ",",
-		target, ",",
-		x_direction, ",",
-		y_direction, ",",
-		distance_category, ",",
+		stage, ",",
+		target_dx, ",",
+		target_dy, ",",
 		on_floor, ",",
 		vertical_motion, ",",
-		ground_ahead, ",",
-		obstacle_ahead, ",",
-		snail_state, ",",
-		route_progress, ",",
-		bottom_right_danger
+		wall_low, ",",
+		wall_high, ",",
+		snail_relation, ",",
+		snail_distance, ",",
+		danger_zone
 	)
 
 
-# ============================================================
-# X DIRECTION
-# ============================================================
+# ------------------------------------------------------------
+# DIRECTION
+# ------------------------------------------------------------
 
 func get_x_direction(
 	player_x: float,
 	target_x: float
 ) -> int:
 
-	if target_x < player_x - 80.0:
+	if target_x < player_x - 50.0:
+		return -1
 
-		return 0
+	if target_x > player_x + 50.0:
+		return 1
 
-	elif target_x > player_x + 80.0:
+	return 0
 
-		return 2
-
-	return 1
-
-
-# ============================================================
-# Y DIRECTION
-# ============================================================
 
 func get_y_direction(
 	player_pos: Vector2,
 	target_pos: Vector2
 ) -> int:
 
-	var difference: float = (
+	var dy: float = (
 		target_pos.y
 		- player_pos.y
 	)
 
+	if dy < -50.0:
+		return -1
 
-	if difference < -60.0:
-
-		return 0
-
-	elif difference > 60.0:
-
-		return 2
-
-	return 1
-
-
-# ============================================================
-# DISTANCE CATEGORY
-# ============================================================
-
-func get_distance_category(
-	distance: float
-) -> int:
-
-	if distance < 100.0:
-
-		return 0
-
-	elif distance < 200.0:
-
+	if dy > 50.0:
 		return 1
 
-	elif distance < 350.0:
-
-		return 2
-
-	elif distance < 500.0:
-
-		return 3
-
-	return 4
+	return 0
 
 
-# ============================================================
-# SNAIL STATE
-# ============================================================
-#
-# 0 = no nearby snail
-# 1 = snail facing player
-# 2 = snail moving away / back toward player
-# 3 = neutral / side
-#
-# ============================================================
+# ------------------------------------------------------------
+# PLAYER MOTION
+# ------------------------------------------------------------
 
-func get_snail_state(
-	player: Node2D,
-	enemies: Node
+func get_vertical_motion(
+	player: CharacterBody2D
 ) -> int:
 
-	if enemies == null:
+	if player.velocity.y < -60.0:
+		return 0       # rising
 
-		return 0
+	if player.velocity.y > 60.0:
+		return 2       # falling
 
-
-	var nearest_snail: Node2D = null
-	var nearest_distance: float = INF
-
-
-	for child in enemies.get_children():
-
-		if not child is Node2D:
-
-			continue
+	return 1           # stable
 
 
-		var snail: Node2D = child as Node2D
+# ------------------------------------------------------------
+# WALL LOW / HIGH
+# ------------------------------------------------------------
+
+func get_sensor_direction(
+	target_dx: int
+) -> float:
+
+	if target_dx < 0:
+		return -1.0
+
+	return 1.0
 
 
-		var distance: float = (
-			player.global_position.distance_to(
-				snail.global_position
-			)
-		)
-
-
-		if distance < nearest_distance:
-
-			nearest_distance = distance
-			nearest_snail = snail
-
-
-	if nearest_snail == null:
-
-		return 0
-
-
-	if nearest_distance > 300.0:
-
-		return 0
-
-
-	var snail_direction_variant = (
-		nearest_snail.get("direction")
-	)
-
-
-	if snail_direction_variant == null:
-
-		return 3
-
-
-	var snail_direction: float = (
-		float(snail_direction_variant)
-	)
-
-
-	var player_x: float = (
-		player.global_position.x
-	)
-
-	var snail_x: float = (
-		nearest_snail.global_position.x
-	)
-
-
-	# Player right of snail
-	if player_x > snail_x:
-
-		if snail_direction > 0.0:
-
-			return 1
-
-		elif snail_direction < 0.0:
-
-			return 2
-
-
-	# Player left of snail
-	elif player_x < snail_x:
-
-		if snail_direction < 0.0:
-
-			return 1
-
-		elif snail_direction > 0.0:
-
-			return 2
-
-
-	return 3
-
-
-# ============================================================
-# GROUND AHEAD
-# ============================================================
-
-func get_ground_ahead_sensor(
-	player: Node2D,
-	direction_to_target: int
+func get_wall_sensor(
+	player: CharacterBody2D,
+	target_dx: int,
+	y_offset: float
 ) -> int:
 
-	var body: CharacterBody2D = (
-		player as CharacterBody2D
+	var direction: float = (
+		get_sensor_direction(target_dx)
 	)
-
-
-	if body == null:
-
-		return 1
-
-
-	var direction: float = 1.0
-
-
-	if direction_to_target == 0:
-
-		direction = -1.0
-
 
 	var start: Vector2 = (
-		body.global_position
+		player.global_position
 		+ Vector2(
-			direction * 80.0,
-			25.0
+			direction * 18.0,
+			y_offset
 		)
 	)
-
-
-	var end: Vector2 = (
-		start
-		+ Vector2(
-			0.0,
-			140.0
-		)
-	)
-
-
-	var query: PhysicsRayQueryParameters2D = (
-		PhysicsRayQueryParameters2D.create(
-			start,
-			end
-		)
-	)
-
-
-	query.collision_mask = 1
-
-	query.exclude = [
-		body.get_rid()
-	]
-
-
-	var result: Dictionary = (
-		body.get_world_2d()
-		.direct_space_state
-		.intersect_ray(query)
-	)
-
-
-	if result.is_empty():
-
-		return 0
-
-
-	return 1
-
-
-# ============================================================
-# OBSTACLE AHEAD
-# ============================================================
-
-func get_obstacle_sensor(
-	player: Node2D,
-	direction_to_target: int
-) -> int:
-
-	var body: CharacterBody2D = (
-		player as CharacterBody2D
-	)
-
-
-	if body == null:
-
-		return 0
-
-
-	var direction: float = 1.0
-
-
-	if direction_to_target == 0:
-
-		direction = -1.0
-
-
-	var start: Vector2 = (
-		body.global_position
-		+ Vector2(
-			direction * 20.0,
-			15.0
-		)
-	)
-
 
 	var end: Vector2 = (
 		start
@@ -764,7 +394,6 @@ func get_obstacle_sensor(
 		)
 	)
 
-
 	var query: PhysicsRayQueryParameters2D = (
 		PhysicsRayQueryParameters2D.create(
 			start,
@@ -772,24 +401,222 @@ func get_obstacle_sensor(
 		)
 	)
 
-
 	query.collision_mask = 1
-
 	query.exclude = [
-		body.get_rid()
+		player.get_rid()
 	]
 
-
 	var result: Dictionary = (
-		body.get_world_2d()
+		player
+		.get_world_2d()
 		.direct_space_state
 		.intersect_ray(query)
 	)
 
+	return (
+		1
+		if not result.is_empty()
+		else 0
+	)
 
-	if result.is_empty():
 
+# ------------------------------------------------------------
+# SNAIL
+# ------------------------------------------------------------
+
+func get_nearest_snail(
+	player: CharacterBody2D,
+	enemies: Node
+) -> Node2D:
+
+	if enemies == null:
+		return null
+
+	var nearest: Node2D = null
+	var nearest_distance: float = INF
+
+	for child in enemies.get_children():
+
+		if not child is Node2D:
+			continue
+
+		var snail: Node2D = (
+			child as Node2D
+		)
+
+		var distance: float = (
+			player.global_position.distance_to(
+				snail.global_position
+			)
+		)
+
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest = snail
+
+	return nearest
+
+
+func get_snail_distance_category(
+	player: CharacterBody2D,
+	enemies: Node
+) -> int:
+
+	var snail: Node2D = (
+		get_nearest_snail(
+			player,
+			enemies
+		)
+	)
+
+	if snail == null:
 		return 0
 
+	var distance: float = (
+		player.global_position.distance_to(
+			snail.global_position
+		)
+	)
 
-	return 1
+	if distance < 80.0:
+		return 1
+
+	if distance < 180.0:
+		return 2
+
+	if distance < 300.0:
+		return 3
+
+	return 0
+
+
+func get_snail_relation(
+	player: CharacterBody2D,
+	enemies: Node
+) -> int:
+
+	var snail: Node2D = (
+		get_nearest_snail(
+			player,
+			enemies
+		)
+	)
+
+	if snail == null:
+		return 0
+
+	var dx: float = (
+		player.global_position.x
+		- snail.global_position.x
+	)
+
+	if absf(dx) < 20.0:
+		return 3
+
+	var direction_value: Variant = (
+		snail.get("direction")
+	)
+
+	if direction_value == null:
+		return 3
+
+	var snail_direction: float = (
+		float(direction_value)
+	)
+
+	# Player is right of snail.
+	if dx > 20.0:
+
+		if snail_direction > 0.0:
+			return 1       # snail facing player
+
+		return 2           # snail back toward player
+
+	# Player is left of snail.
+	if snail_direction < 0.0:
+		return 1           # snail facing player
+
+	return 2               # snail back toward player
+
+
+# ------------------------------------------------------------
+# DANGER ZONES
+# ------------------------------------------------------------
+
+func get_danger_zone(
+	pos: Vector2
+) -> int:
+
+	# Bottom-left warning.
+	if (
+		pos.x <= 220.0
+		and pos.x > 120.0
+		and pos.y >= 630.0
+	):
+		return 1
+
+	# Bottom-left trap.
+	if (
+		pos.x <= 120.0
+		and pos.y >= 630.0
+	):
+		return 2
+
+	# Bottom-right warning.
+	if (
+		pos.x >= 1050.0
+		and pos.x < 1120.0
+		and pos.y >= 630.0
+	):
+		return 3
+
+	# Bottom-right trap.
+	if (
+		pos.x >= 1120.0
+		and pos.y >= 630.0
+	):
+		return 4
+
+	return 0
+
+
+# ------------------------------------------------------------
+# LEVEL GEOMETRY
+# ------------------------------------------------------------
+
+func is_bottom_floor(
+	pos: Vector2
+) -> bool:
+
+	return pos.y >= 630.0
+
+
+func is_on_middle_platform(
+	pos: Vector2
+) -> bool:
+
+	return (
+		pos.x >= 700.0
+		and pos.x <= 960.0
+		and pos.y >= 430.0
+		and pos.y < 560.0
+	)
+
+
+func is_left_platform(
+	player: CharacterBody2D
+) -> bool:
+
+	if not player.is_on_floor():
+		return false
+
+	var pos: Vector2 = (
+		Vector2(player.global_position)
+	)
+
+	return (
+		pos.x >= 20.0
+		and pos.x <= 620.0
+		and pos.y >= 520.0
+		and pos.y <= 620.0
+	)
