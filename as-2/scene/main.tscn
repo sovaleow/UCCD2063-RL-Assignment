@@ -2,9 +2,9 @@
 
 [ext_resource type="Script" uid="uid://c0vve6x06vhao" path="res://scripts/main.gd" id="1_v0l8b"]
 [ext_resource type="PackedScene" uid="uid://mbbo5qdyiho4" path="res://scene/level/level_root.tscn" id="2_v0l8b"]
-[ext_resource type="Script" uid="uid://d3mtmge1dummt" path="res://scripts/rl_environment.gd" id="3_wp4xf"]
-[ext_resource type="Script" uid="uid://dmnqc8tvm3l3p" path="res://scripts/rl_state.gd" id="4_brvut"]
-[ext_resource type="Script" uid="uid://dgaqvg8wktcpi" path="res://scripts/rl_server.gd" id="5_0ha60"]
+[ext_resource type="Script" uid="uid://cijh84xgj0mcn" path="res://scripts/rl_environment.gd" id="3_wp4xf"]
+[ext_resource type="Script" uid="uid://bpis2ak7l65l5" path="res://scripts/rl_state.gd" id="4_brvut"]
+[ext_resource type="Script" uid="uid://1oj8y11oajoh" path="res://scripts/rl_server.gd" id="5_0ha60"]
 
 [node name="Main" type="Node2D" unique_id=246419124]
 script = ExtResource("1_v0l8b")

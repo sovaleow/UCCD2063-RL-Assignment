@@ -92,29 +92,29 @@ func step(action: int) -> Dictionary:
 		if episode_done:
 			break
 
-    var state = get_state()
-    var reward = consume_reward()
+	var state = get_state()
+	var reward = consume_reward()
 
-    # --------------------------------------------------
-    # Distance-based progress reward
-    # --------------------------------------------------
+	# --------------------------------------------------
+	# Distance-based progress reward
+	# --------------------------------------------------
 
-    var current_apple_distance = get_nearest_apple_distance()
+	var current_apple_distance = get_nearest_apple_distance()
 
-    if (
-        previous_apple_distance >= 0.0
-        and current_apple_distance >= 0.0
-        and not episode_done
-    ):
-        var distance_change = previous_apple_distance - current_apple_distance
+	if (
+		previous_apple_distance >= 0.0
+		and current_apple_distance >= 0.0
+		and not episode_done
+	):
+		var distance_change = previous_apple_distance - current_apple_distance
 
-        # Small dense reward for moving toward the current apple.
-        # Clamp the value so it cannot dominate apple/death rewards.
-        reward += clamp(distance_change * 0.01, -1.0, 1.0)
+		# Small dense reward for moving toward the current apple.
+		# Clamp the value so it cannot dominate apple/death rewards.
+		reward += clamp(distance_change * 0.01, -1.0, 1.0)
 
-    previous_apple_distance = current_apple_distance
+	previous_apple_distance = current_apple_distance
 
-    var done = episode_done
+	var done = episode_done
 
 	step_in_progress = false
 
