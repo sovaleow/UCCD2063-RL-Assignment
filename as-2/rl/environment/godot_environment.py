@@ -4,23 +4,51 @@ import websockets
 
 
 class GodotEnvironment:
-    def __init__(self, host="localhost", port=8765):
-        self.uri = f"ws://{host}:{port}"
+
+    def __init__(
+        self,
+        host="localhost",
+        port=8765
+    ):
+
+        self.uri = (
+            f"ws://{host}:{port}"
+        )
+
         self.websocket = None
 
+
     async def connect(self):
-        self.websocket = await websockets.connect(self.uri)
-        print("Connected to Godot")
+
+        self.websocket = (
+            await websockets.connect(
+                self.uri
+            )
+        )
+
+        print(
+            "Connected to Godot"
+        )
+
 
     async def reset(self):
+
         await self.websocket.send(
             json.dumps({
                 "type": "reset"
             })
         )
 
-        response = await self.websocket.recv()
-        data = json.loads(response)
+
+        response = (
+            await self.websocket.recv()
+        )
+
+
+        data = json.loads(
+            response
+        )
+
 
         return (
             data["state"],
@@ -29,7 +57,12 @@ class GodotEnvironment:
             data["score"]
         )
 
-    async def step(self, action):
+
+    async def step(
+        self,
+        action
+    ):
+
         await self.websocket.send(
             json.dumps({
                 "type": "step",
@@ -37,8 +70,16 @@ class GodotEnvironment:
             })
         )
 
-        response = await self.websocket.recv()
-        data = json.loads(response)
+
+        response = (
+            await self.websocket.recv()
+        )
+
+
+        data = json.loads(
+            response
+        )
+
 
         return (
             data["state"],
@@ -47,6 +88,9 @@ class GodotEnvironment:
             data["score"]
         )
 
+
     async def close(self):
+
         if self.websocket is not None:
+
             await self.websocket.close()
