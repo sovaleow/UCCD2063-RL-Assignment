@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://c8b540ljp2wpp"
+
+[deps]
+
+files=["res://rl/training/results/training_results.steps.translation", "res://rl/training/results/training_results.total.translation", "res://rl/training/results/training_results.score.translation", "res://rl/training/results/training_results.success.translation", "res://rl/training/results/training_results.epsilon.translation"]
+
+source_file="res://rl/training/results/training_results.csv"
+dest_files=["res://rl/training/results/training_results.steps.translation", "res://rl/training/results/training_results.total.translation", "res://rl/training/results/training_results.score.translation", "res://rl/training/results/training_results.success.translation", "res://rl/training/results/training_results.epsilon.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true
