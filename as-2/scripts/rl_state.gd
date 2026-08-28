@@ -133,14 +133,16 @@ func get_vertical_direction(player_pos: Vector2, target_pos: Vector2) -> int:
 # --------------------------------------------------
 
 func get_distance_category(distance: float) -> int:
-	if distance < 200:
+	if distance < 100:
 		return 0
-	elif distance < 500:
+	elif distance < 200:
 		return 1
-	else:
+	elif distance < 350:
 		return 2
-
-
+	elif distance < 500:
+		return 3
+	else:
+		return 4
 # --------------------------------------------------
 # Find nearest object
 # --------------------------------------------------
