@@ -90,10 +90,11 @@ async def train() -> None:
     training_results = []
 
     print("=" * 60)
-    print("SARSA V14 TRAINING")
+    print("SARSA BASIC TRAINING")
     print("=" * 60)
     print(f"Seed:             {SEED}")
     print(f"Episodes:         {NUM_EPISODES}")
+    print("Objective:        Collect 2 apples")
     print(f"Alpha:            {LEARNING_RATE}")
     print(f"Gamma:            {DISCOUNT_FACTOR}")
     print(f"Epsilon:          {EPSILON_START}")
@@ -169,6 +170,8 @@ async def train() -> None:
         # This is also where epsilon decay is handled by that class.
         agent.end_episode()
 
+        # Basic scene objective: collect 2 apples.
+        # The environment uses score 10 per collected apple.
         success = (
             1
             if score >= 20
@@ -235,6 +238,11 @@ async def train() -> None:
             print(
                 f"2 apples:       "
                 f"{two_apples:2d}/50"
+            )
+
+            print(
+                f"Objective:      "
+                f"2 apples"
             )
 
             print(
@@ -329,7 +337,7 @@ async def train() -> None:
 
     print()
     print("=" * 60)
-    print("SARSA V14 TRAINING COMPLETE")
+    print("SARSA BASIC TRAINING COMPLETE")
     print("=" * 60)
 
     print(

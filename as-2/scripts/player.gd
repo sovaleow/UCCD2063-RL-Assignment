@@ -54,6 +54,30 @@ var jump_cooldown: int = 0
 var debug_timer: int = 0
 
 
+func _input(event: InputEvent) -> void:
+	# R must work even while the player is dead.
+	# Consume the event BEFORE resetting the scene. The reset may
+	# change/free scene objects, so do not access this Player node
+	# after calling reset_level().
+	if event is InputEventKey:
+		if (
+			event.pressed
+			and not event.echo
+			and event.keycode == KEY_R
+		):
+			get_viewport().set_input_as_handled()
+
+			var current_scene := get_tree().current_scene
+
+			if (
+				current_scene != null
+				and current_scene.has_method("reset_level")
+			):
+				current_scene.reset_level()
+
+			return
+
+
 func _physics_process(delta: float) -> void:
 
 	if not alive:
@@ -392,17 +416,63 @@ func _physics_process(delta: float) -> void:
 
 func die() -> void:
 
-	death_sound.play()
-
-	animated_sprite_2d.animation = "dying"
+	if not alive:
+		return
 
 	alive = false
+	rl_action = 0
+	velocity = Vector2.ZERO
+
+	death_sound.play()
+
+	animated_sprite_2d.stop()
+	animated_sprite_2d.animation = "dying"
+	animated_sprite_2d.frame = 0
+	animated_sprite_2d.play("dying")
 
 	print(
-		"[LEFT ROUTE] PLAYER DIED at "
+		"[PLAYER] PLAYER DIED at "
 		+ str(global_position)
 	)
 
+
+# ============================================================
+# RESET PLAYER
+# ============================================================
+# Restores ALL transient player state after an RL death or when
+# R is pressed. This is important because die() changes
+# `alive` to false and switches the animation to "dying".
+# ============================================================
+
+func reset_player() -> void:
+	# --------------------------------------------------------
+	# FULL PLAYER REVIVE
+	# --------------------------------------------------------
+	# Explicitly stop the death animation and start idle.
+	# This avoids the "first R = still dying" problem.
+	alive = true
+	rl_controlled = false
+	rl_action = 0
+
+	left_apple_test_mode = false
+	navigation_stage = 0
+
+	jump_cooldown = 0
+	debug_timer = 0
+
+	velocity = Vector2.ZERO
+
+	# Make sure the player can process physics again.
+	set_physics_process(true)
+	set_process(true)
+
+	# Reset the animation controller explicitly.
+	animated_sprite_2d.stop()
+	animated_sprite_2d.visible = true
+	animated_sprite_2d.animation = "idle"
+	animated_sprite_2d.frame = 0
+	animated_sprite_2d.flip_h = false
+	animated_sprite_2d.play("idle")
 
 # ============================================================
 # RL ACTION

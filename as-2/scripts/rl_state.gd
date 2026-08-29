@@ -1,76 +1,124 @@
 extends Node
 
 # ============================================================
-# SARSA V14 - SCENE-AWARE STATE
+# SARSA ADVANCED STATE
 # ============================================================
 #
-# ROUTE:
-# START
-#   -> MIDDLE UPPER PLATFORM
-#   -> LEFT SIDE OF MIDDLE PLATFORM
-#   -> DESCEND FROM LEFT SIDE
-#   -> BOTTOM APPLE
-#   -> LEFT PLATFORM
-#   -> LEFT APPLE
-#   -> SUCCESS
+# Designed for the ADVANCED level:
 #
-# IMPORTANT:
-# - Bottom-right corner is a trap and should be avoided.
-# - Bottom-left corner is also treated as a trap.
-# - After the bottom apple, returning to the middle platform
-#   is a bad route.
+# - 3 apples
+# - Multiple platforms
+# - Multiple routes
+# - 3 snails
+# - Gaps / vertical navigation
 #
-# State is compact because this is TABULAR SARSA.
+# This remains a compact state representation for TABULAR SARSA.
 #
-# state:
-# 0 route_stage
-# 1 target_dx
-# 2 target_dy
-# 3 on_floor
-# 4 vertical_motion
-# 5 wall_low
-# 6 wall_high
-# 7 snail_relation
-# 8 snail_distance
-# 9 danger_zone
+# STATE:
+# 0  apple_collection_mask
+# 1  target_dx
+# 2  target_dy
+# 3  on_floor
+# 4  vertical_motion
+# 5  wall_low
+# 6  wall_high
+# 7  snail_relation
+# 8  snail_distance
+# 9  danger_zone
+#
+# apple_collection_mask:
+#
+#   0 = none collected
+#   1 = apple 1 collected
+#   2 = apple 2 collected
+#   3 = apple 1 + apple 2
+#   4 = apple 3 collected
+#   5 = apple 1 + apple 3
+#   6 = apple 2 + apple 3
+#   7 = all 3 collected
+#
 # ============================================================
 
 
 # ------------------------------------------------------------
-# LEVEL COORDINATES
+# ADVANCED APPLE POSITIONS
 # ------------------------------------------------------------
-# These are based on the coordinates already used in the
-# current project. Adjust these only when verified against
-# the actual scene/collision geometry.
+#
+# Based on the current level_root_advanced.tscn:
+#
+# Apple 1:
+# approximately (167, 267)
+#
+# Apple 2:
+# approximately (159, 552)
+#
+# Apple 3:
+# approximately (845, 642)
+#
+# We use these as fallback positions.
 # ------------------------------------------------------------
 
-const MIDDLE_TARGET: Vector2 = Vector2(830.0, 500.0)
-const MIDDLE_LEFT_TARGET: Vector2 = Vector2(700.0, 500.0)
-const LEFT_DESCENT_TARGET: Vector2 = Vector2(700.0, 620.0)
+const APPLE_POSITIONS: Array[Vector2] = [
+	Vector2(167.0, 267.0),
+	Vector2(159.0, 552.0),
+	Vector2(845.0, 642.0)
+]
 
-const BOTTOM_APPLE_POSITION: Vector2 = Vector2(845.0, 642.0)
-const LEFT_PLATFORM_TARGET: Vector2 = Vector2(430.0, 550.0)
-const LEFT_APPLE_POSITION: Vector2 = Vector2(133.0, 549.0)
+
+# ------------------------------------------------------------
+# GENERAL THRESHOLDS
+# ------------------------------------------------------------
+
+const TARGET_X_THRESHOLD := 50.0
+const TARGET_Y_THRESHOLD := 50.0
+
+const FLOOR_Y_THRESHOLD := 630.0
+
+const SNAIL_CLOSE_DISTANCE := 80.0
+const SNAIL_MEDIUM_DISTANCE := 180.0
+const SNAIL_FAR_DISTANCE := 300.0
 
 
 # ------------------------------------------------------------
 # APPLE HELPERS
 # ------------------------------------------------------------
 
-func find_apple(
-	apples: Node,
-	apple_name: String
-) -> Node2D:
+func get_all_apples(node: Node) -> Array[Node2D]:
 
-	if apples == null:
-		return null
+	var result: Array[Node2D] = []
 
-	for child in apples.get_children():
+	if node == null:
+		return result
 
-		if child is Node2D and child.name == apple_name:
-			return child as Node2D
+	_collect_apples_recursive(node, result)
 
-	return null
+	return result
+
+
+func _collect_apples_recursive(
+	node: Node,
+	result: Array[Node2D]
+) -> void:
+
+	for child in node.get_children():
+
+		# Apple scene instances are Node2D.
+		# Only accept nodes that expose already_collected.
+		if child is Node2D:
+
+			var collected_value: Variant = (
+				child.get("already_collected")
+			)
+
+			if collected_value != null:
+				result.append(child as Node2D)
+
+		# Search recursively because the advanced scene
+		# currently contains nested Apple nodes.
+		_collect_apples_recursive(
+			child,
+			result
+		)
 
 
 func is_collected(
@@ -80,35 +128,149 @@ func is_collected(
 	if apple == null:
 		return false
 
-	return apple.get("already_collected") == true
-
-
-func get_bottom_apple_collected(
-	apples: Node
-) -> bool:
-
-	return is_collected(
-		find_apple(
-			apples,
-            "Apple2"
-		)
+	var value: Variant = (
+		apple.get("already_collected")
 	)
 
+	if value == null:
+		return false
 
-func get_left_apple_collected(
-	apples: Node
-) -> bool:
-
-	return is_collected(
-		find_apple(
-			apples,
-            "Apple"
-		)
-	)
+	return bool(value)
 
 
 # ------------------------------------------------------------
-# ROUTE STAGE
+# GET APPLE COLLECTION MASK
+# ------------------------------------------------------------
+
+func get_apple_collection_mask(
+	apples: Node
+) -> int:
+
+	var apple_nodes: Array[Node2D] = (
+		get_all_apples(apples)
+	)
+
+	var mask := 0
+
+	for i in range(
+		min(
+			3,
+			apple_nodes.size()
+		)
+	):
+
+		if is_collected(apple_nodes[i]):
+
+			mask |= (
+				1 << i
+			)
+
+	return mask
+
+
+# ------------------------------------------------------------
+# COUNT COLLECTED APPLES
+# ------------------------------------------------------------
+
+func get_collected_apple_count(
+	apples: Node
+) -> int:
+
+	var mask: int = (
+		get_apple_collection_mask(apples)
+	)
+
+	var count := 0
+
+	for i in range(3):
+
+		if (mask & (1 << i)) != 0:
+			count += 1
+
+	return count
+
+
+# ------------------------------------------------------------
+# NEXT APPLE TARGET
+# ------------------------------------------------------------
+#
+# Select the nearest UNCOLLECTED apple.
+#
+# This makes the advanced environment less route-dependent
+# and allows the agent to navigate the more complex layout.
+# ------------------------------------------------------------
+
+func get_next_apple_target(
+	player: CharacterBody2D,
+	apples: Node
+) -> Vector2:
+
+	var apple_nodes: Array[Node2D] = (
+		get_all_apples(apples)
+	)
+
+	var nearest_target: Vector2 = (
+		player.global_position
+	)
+
+	var nearest_distance: float = INF
+
+	var found_target := false
+
+	# First use actual apple positions from the scene.
+	for apple in apple_nodes:
+
+		if is_collected(apple):
+			continue
+
+		var distance: float = (
+			player.global_position.distance_to(
+				apple.global_position
+			)
+		)
+
+		if distance < nearest_distance:
+
+			nearest_distance = distance
+
+			nearest_target = (
+				apple.global_position
+			)
+
+			found_target = true
+
+	# Fallback to the fixed positions if necessary.
+	if not found_target:
+
+		for apple_position in APPLE_POSITIONS:
+
+			var distance: float = (
+				player.global_position.distance_to(
+					apple_position
+				)
+			)
+
+			if distance < nearest_distance:
+
+				nearest_distance = distance
+				nearest_target = apple_position
+
+				found_target = true
+
+	return nearest_target
+
+
+# ------------------------------------------------------------
+# ROUTE / PROGRESS STAGE
+# ------------------------------------------------------------
+#
+# Instead of assuming a fixed platform route, stage is based
+# primarily on how many apples have been collected.
+#
+# 0 = no apples
+# 1 = one apple
+# 2 = two apples
+# 3 = all apples
 # ------------------------------------------------------------
 
 func get_route_stage(
@@ -116,58 +278,15 @@ func get_route_stage(
 	apples: Node
 ) -> int:
 
-	var pos: Vector2 = Vector2(
-		player.global_position
+	var collected: int = (
+		get_collected_apple_count(apples)
 	)
 
-	var bottom_collected: bool = (
-		get_bottom_apple_collected(apples)
-	)
-
-	var left_collected: bool = (
-		get_left_apple_collected(apples)
-	)
-
-	# Both apples collected.
-	if bottom_collected and left_collected:
-		return 6
-
-	# --------------------------------------------------------
-	# BEFORE BOTTOM APPLE
-	# --------------------------------------------------------
-
-	if not bottom_collected:
-
-		if is_on_middle_platform(pos):
-
-			# Right / centre side of middle platform.
-			if pos.x > 780.0:
-				return 1
-
-			# Left side: descend from here.
-			return 2
-
-		# Bottom floor before first apple.
-		if is_bottom_floor(pos):
-			return 3
-
-		# Start / upper area.
-		return 0
-
-	# --------------------------------------------------------
-	# AFTER BOTTOM APPLE
-	# --------------------------------------------------------
-
-	# First objective after Apple 1 is the LEFT PLATFORM.
-	if not is_left_platform(player):
-		return 4
-
-	# Standing on left platform.
-	return 5
+	return collected
 
 
 # ------------------------------------------------------------
-# CURRENT TARGET
+# TARGET POSITION
 # ------------------------------------------------------------
 
 func get_target_position(
@@ -175,42 +294,22 @@ func get_target_position(
 	apples: Node
 ) -> Vector2:
 
-	var stage: int = get_route_stage(
+	var mask: int = (
+		get_apple_collection_mask(apples)
+	)
+
+	# All apples collected.
+	if mask == 7:
+
+		return (
+			player.global_position
+		)
+
+	# Otherwise target the nearest uncollected apple.
+	return get_next_apple_target(
 		player,
 		apples
 	)
-
-	match stage:
-
-		# START -> MIDDLE UPPER PLATFORM
-		0:
-			return MIDDLE_TARGET
-
-		# MIDDLE UPPER -> LEFT
-		1:
-			return MIDDLE_LEFT_TARGET
-
-		# LEFT SIDE -> DESCEND
-		2:
-			return LEFT_DESCENT_TARGET
-
-		# BOTTOM FLOOR -> BOTTOM APPLE
-		3:
-			return BOTTOM_APPLE_POSITION
-
-		# BOTTOM APPLE -> LEFT PLATFORM
-		4:
-			return LEFT_PLATFORM_TARGET
-
-		# LEFT PLATFORM -> LEFT APPLE
-		5:
-			return LEFT_APPLE_POSITION
-
-		# COMPLETE
-		_:
-			return Vector2(
-				player.global_position
-			)
 
 
 # ------------------------------------------------------------
@@ -223,50 +322,87 @@ func get_state(
 	enemies: Node
 ) -> String:
 
-	var stage: int = get_route_stage(
-		player,
-		apples
+	var apple_mask: int = (
+		get_apple_collection_mask(apples)
 	)
 
-	var target: Vector2 = get_target_position(
-		player,
-		apples
+	var target: Vector2 = (
+		get_target_position(
+			player,
+			apples
+		)
 	)
 
-	var pos: Vector2 = Vector2(
-		player.global_position
+	var pos: Vector2 = (
+		Vector2(player.global_position)
 	)
 
-	var target_dx: int = get_x_direction(
-		pos.x,
-		target.x
+
+	# --------------------------------------------------------
+	# TARGET DIRECTION
+	# --------------------------------------------------------
+
+	var target_dx: int = (
+		get_x_direction(
+			pos.x,
+			target.x
+		)
 	)
 
-	var target_dy: int = get_y_direction(
-		pos,
-		target
+	var target_dy: int = (
+		get_y_direction(
+			pos,
+			target
+		)
 	)
+
+
+	# --------------------------------------------------------
+	# PLAYER GROUND STATE
+	# --------------------------------------------------------
 
 	var on_floor: int = (
-		1 if player.is_on_floor()
+		1
+		if player.is_on_floor()
 		else 0
 	)
 
+
+	# --------------------------------------------------------
+	# VERTICAL MOVEMENT
+	# --------------------------------------------------------
+
 	var vertical_motion: int = (
-		get_vertical_motion(player)
+		get_vertical_motion(
+			player
+		)
 	)
 
-	var wall_low: int = get_wall_sensor(
-		player,
-		target_dx,
-		12.0
+
+	# --------------------------------------------------------
+	# WALL SENSORS
+	# --------------------------------------------------------
+
+	var wall_low: int = (
+		get_wall_sensor(
+			player,
+			target_dx,
+			12.0
+		)
 	)
 
-	var wall_high: int = get_wall_sensor(
-		player,
-		target_dx,
-		-28.0
+	var wall_high: int = (
+		get_wall_sensor(
+			player,
+			target_dx,
+			-28.0
+		)
 	)
+
+
+	# --------------------------------------------------------
+	# SNAIL
+	# --------------------------------------------------------
 
 	var snail_relation: int = (
 		get_snail_relation(
@@ -282,12 +418,24 @@ func get_state(
 		)
 	)
 
+
+	# --------------------------------------------------------
+	# DANGER
+	# --------------------------------------------------------
+
 	var danger_zone: int = (
-		get_danger_zone(pos)
+		get_danger_zone(
+			pos
+		)
 	)
 
+
+	# --------------------------------------------------------
+	# RETURN STATE
+	# --------------------------------------------------------
+
 	return str(
-		stage, ",",
+		apple_mask, ",",
 		target_dx, ",",
 		target_dy, ",",
 		on_floor, ",",
@@ -301,7 +449,7 @@ func get_state(
 
 
 # ------------------------------------------------------------
-# DIRECTION
+# X DIRECTION
 # ------------------------------------------------------------
 
 func get_x_direction(
@@ -309,14 +457,18 @@ func get_x_direction(
 	target_x: float
 ) -> int:
 
-	if target_x < player_x - 50.0:
+	if target_x < player_x - TARGET_X_THRESHOLD:
 		return -1
 
-	if target_x > player_x + 50.0:
+	if target_x > player_x + TARGET_X_THRESHOLD:
 		return 1
 
 	return 0
 
+
+# ------------------------------------------------------------
+# Y DIRECTION
+# ------------------------------------------------------------
 
 func get_y_direction(
 	player_pos: Vector2,
@@ -328,17 +480,17 @@ func get_y_direction(
 		- player_pos.y
 	)
 
-	if dy < -50.0:
+	if dy < -TARGET_Y_THRESHOLD:
 		return -1
 
-	if dy > 50.0:
+	if dy > TARGET_Y_THRESHOLD:
 		return 1
 
 	return 0
 
 
 # ------------------------------------------------------------
-# PLAYER MOTION
+# VERTICAL MOTION
 # ------------------------------------------------------------
 
 func get_vertical_motion(
@@ -355,7 +507,7 @@ func get_vertical_motion(
 
 
 # ------------------------------------------------------------
-# WALL LOW / HIGH
+# WALL SENSOR DIRECTION
 # ------------------------------------------------------------
 
 func get_sensor_direction(
@@ -368,6 +520,10 @@ func get_sensor_direction(
 	return 1.0
 
 
+# ------------------------------------------------------------
+# WALL SENSOR
+# ------------------------------------------------------------
+
 func get_wall_sensor(
 	player: CharacterBody2D,
 	target_dx: int,
@@ -375,7 +531,9 @@ func get_wall_sensor(
 ) -> int:
 
 	var direction: float = (
-		get_sensor_direction(target_dx)
+		get_sensor_direction(
+			target_dx
+		)
 	)
 
 	var start: Vector2 = (
@@ -402,6 +560,7 @@ func get_wall_sensor(
 	)
 
 	query.collision_mask = 1
+
 	query.exclude = [
 		player.get_rid()
 	]
@@ -421,7 +580,7 @@ func get_wall_sensor(
 
 
 # ------------------------------------------------------------
-# SNAIL
+# FIND NEAREST SNAIL
 # ------------------------------------------------------------
 
 func get_nearest_snail(
@@ -433,6 +592,7 @@ func get_nearest_snail(
 		return null
 
 	var nearest: Node2D = null
+
 	var nearest_distance: float = INF
 
 	for child in enemies.get_children():
@@ -451,11 +611,17 @@ func get_nearest_snail(
 		)
 
 		if distance < nearest_distance:
+
 			nearest_distance = distance
+
 			nearest = snail
 
 	return nearest
 
+
+# ------------------------------------------------------------
+# SNAIL DISTANCE CATEGORY
+# ------------------------------------------------------------
 
 func get_snail_distance_category(
 	player: CharacterBody2D,
@@ -478,17 +644,27 @@ func get_snail_distance_category(
 		)
 	)
 
-	if distance < 80.0:
+	if distance < SNAIL_CLOSE_DISTANCE:
 		return 1
 
-	if distance < 180.0:
+	if distance < SNAIL_MEDIUM_DISTANCE:
 		return 2
 
-	if distance < 300.0:
+	if distance < SNAIL_FAR_DISTANCE:
 		return 3
 
 	return 0
 
+
+# ------------------------------------------------------------
+# SNAIL RELATION
+# ------------------------------------------------------------
+#
+# 0 = no useful snail information
+# 1 = snail facing player
+# 2 = snail facing away
+# 3 = very close / uncertain
+# ------------------------------------------------------------
 
 func get_snail_relation(
 	player: CharacterBody2D,
@@ -513,6 +689,7 @@ func get_snail_relation(
 	if absf(dx) < 20.0:
 		return 3
 
+
 	var direction_value: Variant = (
 		snail.get("direction")
 	)
@@ -520,27 +697,42 @@ func get_snail_relation(
 	if direction_value == null:
 		return 3
 
+
 	var snail_direction: float = (
 		float(direction_value)
 	)
 
-	# Player is right of snail.
+
+	# Player is to the right of snail.
 	if dx > 20.0:
 
 		if snail_direction > 0.0:
-			return 1       # snail facing player
+			return 1
 
-		return 2           # snail back toward player
+		return 2
 
-	# Player is left of snail.
+
+	# Player is to the left of snail.
 	if snail_direction < 0.0:
-		return 1           # snail facing player
+		return 1
 
-	return 2               # snail back toward player
+	return 2
 
 
 # ------------------------------------------------------------
 # DANGER ZONES
+# ------------------------------------------------------------
+#
+# These are intentionally simple.
+#
+# 0 = safe
+# 1 = bottom-left warning
+# 2 = bottom-left trap
+# 3 = bottom-right warning
+# 4 = bottom-right trap
+#
+# The advanced map can use these areas to discourage the
+# agent from wasting time at the corners.
 # ------------------------------------------------------------
 
 func get_danger_zone(
@@ -555,12 +747,14 @@ func get_danger_zone(
 	):
 		return 1
 
+
 	# Bottom-left trap.
 	if (
 		pos.x <= 120.0
 		and pos.y >= 630.0
 	):
 		return 2
+
 
 	# Bottom-right warning.
 	if (
@@ -570,6 +764,7 @@ func get_danger_zone(
 	):
 		return 3
 
+
 	# Bottom-right trap.
 	if (
 		pos.x >= 1120.0
@@ -577,46 +772,5 @@ func get_danger_zone(
 	):
 		return 4
 
+
 	return 0
-
-
-# ------------------------------------------------------------
-# LEVEL GEOMETRY
-# ------------------------------------------------------------
-
-func is_bottom_floor(
-	pos: Vector2
-) -> bool:
-
-	return pos.y >= 630.0
-
-
-func is_on_middle_platform(
-	pos: Vector2
-) -> bool:
-
-	return (
-		pos.x >= 700.0
-		and pos.x <= 960.0
-		and pos.y >= 430.0
-		and pos.y < 560.0
-	)
-
-
-func is_left_platform(
-	player: CharacterBody2D
-) -> bool:
-
-	if not player.is_on_floor():
-		return false
-
-	var pos: Vector2 = (
-		Vector2(player.global_position)
-	)
-
-	return (
-		pos.x >= 20.0
-		and pos.x <= 620.0
-		and pos.y >= 520.0
-		and pos.y <= 620.0
-	)

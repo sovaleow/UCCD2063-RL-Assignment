@@ -4,16 +4,17 @@ signal collected
 
 @onready var animated_sprite_2d: AnimatedSprite2D = $AnimatedSprite2D
 @onready var collected_sound: AudioStreamPlayer2D = $CollectedSound
+@onready var collision_shape: CollisionShape2D = $CollisionShape2D
 
 var already_collected: bool = false
 
-# Called when the node enters the scene tree for the first time.
+
 func _ready() -> void:
-	pass # Replace with function body.
+	# Always start as a visible, collectible apple.
+	reset_apple()
 
 
-# Called every frame. 'delta' is the elapsed time since the previous frame.
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	pass
 
 
@@ -24,10 +25,33 @@ func _on_body_entered(body: Node2D) -> void:
 	if body is CharacterBody2D:
 		already_collected = true
 
-		animated_sprite_2d.animation = "collected"
+		animated_sprite_2d.play("collected")
 		collected_sound.play()
 
-		# Disable the collision so the apple cannot be collected again
-		$CollisionShape2D.set_deferred("disabled", true)
+		collision_shape.set_deferred(
+			"disabled",
+			true
+		)
 
 		collected.emit()
+
+
+# ============================================================
+# RESET APPLE
+# ============================================================
+
+func reset_apple() -> void:
+	already_collected = false
+
+	visible = true
+	set_process(true)
+
+	if collision_shape != null:
+		collision_shape.set_deferred(
+			"disabled",
+			false
+		)
+
+	if animated_sprite_2d != null:
+		animated_sprite_2d.visible = true
+		animated_sprite_2d.play("default")
