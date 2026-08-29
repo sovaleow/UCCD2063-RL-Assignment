@@ -15,7 +15,7 @@ MAX_STEPS = 450
 LEARNING_RATE = 0.15
 DISCOUNT_FACTOR = 0.997
 
-EPSILON_START = 0.35
+EPSILON_START = 0.50
 EPSILON_MIN = 0.06
 EPSILON_DECAY = 0.999
 
@@ -54,7 +54,8 @@ async def train() -> None:
     print("Epsilon start:     ", EPSILON_START)
     print("Epsilon minimum:  ", EPSILON_MIN)
     print()
-    print("Route: Apple 1 -> Apple 2 -> Apple 3")
+    print("Route: Any apple order")
+    print("Target: nearest remaining apple")
     print("Target: remaining apple relative position")
     print("State: compact")
     print("Exploration: epsilon-greedy")

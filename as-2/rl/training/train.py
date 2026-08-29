@@ -16,28 +16,28 @@ from rl.environment.godot_environment import GodotEnvironment
 # and API.
 # ============================================================
 
-NUM_EPISODES = 1000
+NUM_EPISODES = 2000
 MAX_STEPS = 500
 
 LEARNING_RATE = 0.15
 DISCOUNT_FACTOR = 0.997
 
-EPSILON_START = 1.0
-EPSILON_DECAY = 0.997
-EPSILON_MIN = 0.05
+EPSILON_START = 0.35
+EPSILON_DECAY = 0.999
+EPSILON_MIN = 0.06
 
 NUM_ACTIONS = 6
 
-RESULTS_DIR = "results_v14"
+RESULTS_DIR = "results_basic_improved"
 
 Q_TABLE_PATH = os.path.join(
     RESULTS_DIR,
-    "q_table_v14.json",
+    "q_table_basic_improved.json",
 )
 
 TRAINING_RESULTS_PATH = os.path.join(
     RESULTS_DIR,
-    "training_results_v14.csv",
+    "training_results_basic_improved.csv",
 )
 
 SEED = 43
@@ -75,9 +75,7 @@ async def train() -> None:
 
     await env.connect()
 
-    # IMPORTANT:
-    # This matches the ACTUAL SARSAAgent constructor/API
-    # from your current project, not the friend's notebook.
+
     agent = SARSAAgent(
         n_actions=NUM_ACTIONS,
         alpha=LEARNING_RATE,
@@ -90,7 +88,7 @@ async def train() -> None:
     training_results = []
 
     print("=" * 60)
-    print("SARSA BASIC TRAINING")
+    print("SARSA BASIC IMPROVED TRAINING")
     print("=" * 60)
     print(f"Seed:             {SEED}")
     print(f"Episodes:         {NUM_EPISODES}")

@@ -71,6 +71,7 @@ const TIME_PENALTY := -0.12
 const PROGRESS_REWARD := 0.45
 const SAFE_PROGRESS_BONUS := 0.20
 const WRONG_DIRECTION_PENALTY := -0.18
+const UPWARD_TARGET_PROGRESS_REWARD := 0.30
 
 const STUCK_PENALTY := -2.0
 
@@ -84,7 +85,8 @@ const WALK_PROGRESS_BONUS := 0.10
 
 # Discourage unnecessary jumping when there is no relevant
 # same-level snail.
-const UNNECESSARY_JUMP_PENALTY := -0.20
+const UNNECESSARY_JUMP_PENALTY := -0.10
+const TARGET_JUMP_BONUS := 0.60
 
 # Encourage jump-over-snail behavior when the snail is on
 # approximately the same level and is close/approaching.
@@ -382,6 +384,24 @@ func step(
 
 		reward += WRONG_DIRECTION_PENALTY
 
+	# ========================================================
+	# 1B. UPWARD TARGET PROGRESS
+	# ========================================================
+
+	var target_position_for_vertical := get_target_position()
+
+	var target_y_direction_for_vertical: int = (
+		state_tracker.get_target_y_direction(
+			player,
+			target_position_for_vertical
+		)
+	)
+
+	if (
+		target_y_direction_for_vertical < 0
+		and position_after.y < position_before.y - 5.0
+	):
+		reward += UPWARD_TARGET_PROGRESS_REWARD
 
 	# ========================================================
 	# 2. JUMP SHAPING
@@ -393,15 +413,46 @@ func step(
 
 	if action == 4 or action == 5:
 
-		if _good_snail_jump_opportunity():
+		var target_position := get_target_position()
+
+		var target_x_direction: int = (
+			state_tracker.get_target_x_direction(
+				player,
+				target_position
+			)
+		)
+
+		var target_y_direction: int = (
+			state_tracker.get_target_y_direction(
+				player,
+				target_position
+			)
+		)
+
+		var target_requires_upward_jump := (
+			target_y_direction < 0
+		)
+
+		var jump_toward_target := (
+			(action == 4 and target_x_direction < 0)
+			or
+			(action == 5 and target_x_direction > 0)
+		)
+
+		if (
+			target_requires_upward_jump
+			and jump_toward_target
+		):
+
+			reward += TARGET_JUMP_BONUS
+
+		elif _good_snail_jump_opportunity():
 
 			reward += SNAIL_JUMP_BONUS
 
 		else:
 
 			reward += UNNECESSARY_JUMP_PENALTY
-
-
 	# ========================================================
 	# 3. WAITING FOR APPROACHING SNAIL
 	# ========================================================

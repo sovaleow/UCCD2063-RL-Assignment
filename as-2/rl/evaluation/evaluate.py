@@ -14,7 +14,7 @@ NUM_TEST_EPISODES = 100
 MAX_STEPS = 500
 NUM_ACTIONS = 6
 
-Q_TABLE_PATH = "result v14_run2_ 8.40%/2ndRun_q_table_v14.json"
+Q_TABLE_PATH = "30.30% Basic/q_table_basic_improved.json"
 
 
 # ============================================================
@@ -47,40 +47,34 @@ def load_q_table(agent: SARSAAgent, path: str) -> None:
 # ============================================================
 # GREEDY ACTION
 # ============================================================
+VALID_ACTIONS = (0, 1, 2, 4, 5)
 
 def greedy_action(
     agent: SARSAAgent,
     state: str,
 ) -> int:
 
-    # No exploration.
-    # The agent should always choose its best learned action.
-
     if hasattr(agent, "Q"):
-
         q_values = agent.Q.get(
             state,
             [0.0] * NUM_ACTIONS,
         )
 
     elif hasattr(agent, "q_table"):
-
         q_values = agent.q_table.get(
             state,
             [0.0] * NUM_ACTIONS,
         )
 
     else:
-
         raise AttributeError(
             "SARSAAgent has neither Q nor q_table."
         )
 
     return max(
-        range(len(q_values)),
+        VALID_ACTIONS,
         key=lambda action: q_values[action],
     )
-
 
 # ============================================================
 # TEST
